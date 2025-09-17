@@ -49,7 +49,13 @@ class CServerBL():
             print(e)
     
     def stop_server(self):
-
+        for client in self.clients:
+            client.join()
+        if self.run:
+            self.run = False
+        if self.server_socket:
+            self.server_socket = None
+        self.clients = []
 
 
 
