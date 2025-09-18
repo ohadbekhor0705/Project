@@ -3,8 +3,8 @@ from tkinter import ttk
 class StorageGUI():
     def __init__(self, parent_wnd):
         self.this_wnd = Ctk.CTkToplevel(parent_wnd)
-        Ctk.set_default_color_theme("./themes/rime.json")
-        Ctk.set_appearance_mode("System")
+        #Ctk.set_default_color_theme("./themes/rime.json")
+        #Ctk.set_appearance_mode("System")
         self._savefile_button = None
         self._deletefile_button = None
         self._uploadfile_button = None
@@ -54,7 +54,7 @@ class StorageGUI():
             self._filestbl.heading(col, text=col)
             self._filestbl.column(col, width=int(0.65*width/len(columns)), anchor="center", stretch=False)
         self._filestbl.place(relx = 0.1, rely=0.34, relheight=0.6, relwidth=0.65)
-        # Sample data (10 rows)
+        # Sample data 
         sample_data = [
             ("report.docx", "1.2", "2025-09-01"),
             ("presentation.pptx", "3.8", "2025-09-02"),

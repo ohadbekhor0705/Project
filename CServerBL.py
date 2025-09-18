@@ -60,11 +60,11 @@ class CServerBL():
 
 
 class CClientHandler(threading.Thread):
-    def __init__(self, client_socket, client_address):
+    def __init__(self, client_socket: socket.socket, client_address: socket._Address):
         super().__init__()
         
         self.client_socket: socket.socket = client_socket
-        self.client_address  = client_address
+        self.client_address: socket._Address  = client_address
         self.connected = False
     
 
