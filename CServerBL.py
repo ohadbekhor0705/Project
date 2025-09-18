@@ -2,13 +2,13 @@ import socket
 import threading
 import cryptography
 import sqlite3
-
+import json
 
 
 class CServerBL():
-    def __init__(self, ip: str, port: int):
-        self._ip = ip
-        self._port = port
+    def __init__(self):
+        self._ip: str = "0.0.0.0"
+        self._port = 5000
         self.server_socket = None
         self.run = False
 
@@ -38,7 +38,7 @@ class CServerBL():
             conn.commit()
     def start_server(self) ->  None:
         try:
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
             self.server_socket.bind((self._ip, self._port))
             self._server_socket.listen(5)
             while self.run and self.server_socket is not None:
@@ -62,11 +62,17 @@ class CServerBL():
 
 
 class CClientHandler(threading.Thread):
-    def __init__(self, client_socket: socket.socket, client_address: socket._Address):
+    def __init__(self, client_socket: socket.socket, client_address: socket._Address) -> None:
         super().__init__()
         
         self.client_socket: socket.socket = client_socket
         self.client_address: socket._Address  = client_address
         self.connected = False
     
+    # This code run for every client in a different thread
+    def run(self) -> None:
 
+        self.connected = True
+        # Server functionality here
+        while self.connected:
+            pass

@@ -46,7 +46,7 @@ class StorageGUI():
         # Create Custom styling
         style = ttk.Style()
         style.configure("Treeview", font=("Arial", 15))          # Table font
-        style.configure("Treeview.Heading", font=("Arial", 25, "bold"))  # Header font
+        style.configure("Treeview.Heading", font=("Arial", 25, "bold"), foreground="#490012")  # Header styling
         columns = ("file name", "file size (MB)", "Date")
         self._filestbl = ttk.Treeview(self.this_wnd, columns=columns, show="headings", )
         
