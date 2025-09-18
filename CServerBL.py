@@ -21,7 +21,9 @@ class CServerBL():
                     username CHAR(255),
                     password_hash CHAR(255),
                     max_storage INT,
-                    curr_storage INT
+                    curr_storage INT,
+                    tries INT,
+                    disabled BOOLEAN
                 )
 
                 CREATE TABLE IF NOT EXISTS files (
