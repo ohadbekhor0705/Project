@@ -1,5 +1,5 @@
 import customtkinter as Ctk
-from tkinter import tt
+from tkinter import ttk
 class StorageGUI():
 
 
