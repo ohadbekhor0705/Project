@@ -11,18 +11,19 @@ class CServerBL():
         self._port = 5000
         self.server_socket = None
         self.run = False
-
+        # save list of clients
         self.clients: list[CClientHandler] =  []
         with sqlite3.connect("Database.db") as conn:
+            # create tables if not exist
             cur = conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS users(
                     uid INTEGER PRIMARY KEY,
                     username CHAR(255),
                     password_hash CHAR(255),
-                    max_storage INT,
-                    curr_storage INT,
-                    tries INT,
+                    max_storage INT DEFAULT 1000000000,
+                    curr_storage INT DEFAULT 0,
+                    tries INT DEFAULT 0,
                     disabled BOOLEAN
                 )
 
@@ -36,6 +37,8 @@ class CServerBL():
                 """
             )
             conn.commit()
+
+    # Start the server
     def start_server(self) ->  None:
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
@@ -60,7 +63,7 @@ class CServerBL():
         self.clients = []
 
 
-
+# This class handle every client in a different thread.
 class CClientHandler(threading.Thread):
     def __init__(self, client_socket: socket.socket, client_address: socket._Address) -> None:
         super().__init__()

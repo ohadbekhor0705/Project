@@ -1,6 +1,8 @@
 import customtkinter as Ctk
-from tkinter import ttk
+from tkinter import tt
 class StorageGUI():
+
+
     def __init__(self, parent_wnd):
         self.this_wnd = Ctk.CTkToplevel(parent_wnd)
         #Ctk.set_default_color_theme("./themes/rime.json")
@@ -55,21 +57,9 @@ class StorageGUI():
             self._filestbl.column(col, width=int(0.65*width/len(columns)), anchor="center", stretch=False)
         self._filestbl.place(relx = 0.1, rely=0.34, relheight=0.6, relwidth=0.65)
         # Sample data 
-        sample_data = [
-            ("report.docx", "1.2", "2025-09-01"),
-            ("presentation.pptx", "3.8", "2025-09-02"),
-            ("data.csv", "0.9", "2025-09-03"),
-            ("script.py", "0.4", "2025-09-04"),
-            ("image.png", "2.1", "2025-09-05"),
-            ("notes.txt", "0.2", "2025-09-06"),
-            ("archive.zip", "15.6", "2025-09-07"),
-            ("music.mp3", "4.3", "2025-09-08"),
-            ("video.mp4", "120.5", "2025-09-09"),
-            ("backup.iso", "700.0", "2025-09-10"),
-        ]
 
-        for row in sample_data:
-            self._filestbl.insert("", "end", values=row)
+        for row in range(300):
+            self._filestbl.insert("", "end", values=(f"File{row+1}.txt", f"{row*5+3}", "2024-06-01 12:00:00"))
 
 
 if __name__ == '__main__':
