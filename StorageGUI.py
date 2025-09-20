@@ -1,6 +1,7 @@
 import customtkinter as Ctk
 from tkinter import ttk
-class StorageGUI():
+from CServerBL import CServerBL
+class StorageGUI(CServerBL):
 
 
     def __init__(self, parent_wnd):

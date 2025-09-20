@@ -61,17 +61,19 @@ class CServerBL():
         if self.server_socket:
             self.server_socket = None
         self.clients = []
+    def table_callback(self):
+        pass
 
 
 # This class handle every client in a different thread.
 class CClientHandler(threading.Thread):
-    def __init__(self, client_socket: socket.socket, client_address: socket._Address) -> None:
+    def __init__(self, client_socket: socket.socket, client_address: socket._Address, table_callback) -> None:
         super().__init__()
         
         self.client_socket: socket.socket = client_socket
         self.client_address: socket._Address  = client_address
         self.connected = False
-    
+        self.table_callback = table_callback
     # This code run for every client in a different thread
     def run(self) -> None:
 
