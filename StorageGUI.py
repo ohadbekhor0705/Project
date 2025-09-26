@@ -1,7 +1,6 @@
 import customtkinter as Ctk
 from tkinter import ttk
-from CServerBL import CServerBL
-class StorageGUI(CServerBL):
+class StorageGUI():
 
 
     def __init__(self, parent_wnd):
@@ -13,11 +12,12 @@ class StorageGUI(CServerBL):
         self._uploadfile_button = None
         self._filestbl = None
         self._searchbar = None
-        self._search_button = None 
-        self.FONT = ("Arial",24)
+        self._search_button = None  
+        self._title = None
+        self.FONT = ("Helvetica",24)
         self.create_ui()
         self.this_wnd.mainloop()
-        self._title = None
+       
        
         
     def create_ui(self):
@@ -49,7 +49,7 @@ class StorageGUI(CServerBL):
         # Create Custom styling
         style = ttk.Style()
         style.configure("Treeview", font=("Arial", 15))          # Table font
-        style.configure("Treeview.Heading", font=("Arial", 25, "bold"), foreground="#490012")  # Header styling
+        style.configure("Treeview.Heading", font=("Arial", 25, "bold"), foreground="#1429E6")  # Header styling
         columns = ("file name", "file size (MB)", "Date")
         self._filestbl = ttk.Treeview(self.this_wnd, columns=columns, show="headings", )
         

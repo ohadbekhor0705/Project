@@ -3,7 +3,7 @@ import threading
 import cryptography
 import sqlite3
 import json
-
+import os
 
 class CServerBL():
     def __init__(self):
@@ -37,6 +37,9 @@ class CServerBL():
                 """
             )
             conn.commit()
+        storage_folder_name = "./StorageFiles"
+        if not os.path.exists(storage_folder_name):
+            os.mkdir(storage_folder_name)
 
     # Start the server
     def start_server(self) ->  None:
@@ -67,7 +70,7 @@ class CServerBL():
 
 # This class handle every client in a different thread.
 class CClientHandler(threading.Thread):
-    def __init__(self, client_socket: socket.socket, client_address: socket._Address, table_callback) -> None:
+    def __init__(self, client_socket: socket.socket, client_address, table_callback) -> None:
         super().__init__()
         
         self.client_socket: socket.socket = client_socket
