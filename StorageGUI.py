@@ -1,5 +1,8 @@
 import customtkinter as Ctk
 from tkinter import ttk
+
+
+
 class StorageGUI():
 
 
@@ -24,7 +27,7 @@ class StorageGUI():
         self.this_wnd.title("Browse Files")
         height, width = 750, 1300
         self.this_wnd.geometry(f"{width}x{height}")
-        self.this_wnd.resizable(False, False)
+        self.this_wnd.resizable(True, True)
         
         # creating UI widgets:
         self._title = Ctk.CTkLabel(self.this_wnd, text="Hi, {username}", anchor="center",font=self.FONT)
@@ -59,7 +62,7 @@ class StorageGUI():
         self._filestbl.place(relx = 0.1, rely=0.34, relheight=0.6, relwidth=0.65)
         # Sample data 
 
-        for row in range(300):
+        for row in range(3):
             self._filestbl.insert("", "end", values=(f"File{row+1}.txt", f"{row*5+3}", "2024-06-01 12:00:00"))
 
 
