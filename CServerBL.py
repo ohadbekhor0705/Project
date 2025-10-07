@@ -71,7 +71,7 @@ class CServerBL():
         if self.server_socket:
             self.server_socket = None
         self.clients = []
-    def table_callback(self):
+    def table_callback(self) -> None:
         pass
 
 
