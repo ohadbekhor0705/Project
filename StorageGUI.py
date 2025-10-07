@@ -6,7 +6,7 @@ from tkinter import ttk
 class StorageGUI():
 
 
-    def __init__(self, parent_wnd):
+    def __init__(self, parent_wnd) -> None:
         self.this_wnd = Ctk.CTkToplevel(parent_wnd)
         #Ctk.set_default_color_theme("./themes/rime.json")
         #Ctk.set_appearance_mode("System")
@@ -23,7 +23,7 @@ class StorageGUI():
        
        
         
-    def create_ui(self):
+    def create_ui(self) -> None:
         self.this_wnd.title("Browse Files")
         height, width = 750, 1300
         self.this_wnd.geometry(f"{width}x{height}")
@@ -52,7 +52,7 @@ class StorageGUI():
         # Create Custom styling
         style = ttk.Style()
         style.configure("Treeview", font=("Arial", 15))          # Table font
-        style.configure("Treeview.Heading", font=("Arial", 25, "bold"), foreground="#1429E6")  # Header styling
+        style.configure("Treeview.Heading", font=("Arial", 25, "bold"))  # Header styling
         columns = ("file name", "file size (MB)", "Date")
         self._filestbl = ttk.Treeview(self.this_wnd, columns=columns, show="headings", )
         
