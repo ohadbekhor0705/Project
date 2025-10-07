@@ -13,9 +13,9 @@ class CClientBL():
         try:
             _client_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
             _client_socket.connect(self.ADDR)
-            print(f"[CLIENT_BL] {self._client_socket.getsockname()} connected")
+            print(f"[CLIENT_BL] {_client_socket.getsockname()} connected")
             self.connected = True
-            return self._client_socket
+            return _client_socket
         except Exception as e:
             print("[CLIENT_BL] Exception on connect: {}".format(e))
             return None

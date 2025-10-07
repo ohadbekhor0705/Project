@@ -9,7 +9,7 @@ import os
 
 
 class CServerBL():
-    def __init__(self):
+    def __init__(self) -> None:
         self._ip: str = "0.0.0.0"
         self._port = 5000
         self.server_socket = None
@@ -57,7 +57,7 @@ class CServerBL():
             self.run = True
             print(f"[SERVER] is running at \nIP: {socket.gethostbyname(socket.gethostname())} \nPORT: {self._port}")
             while self.run and self.server_socket is not None:
-                client_handler = CClientHandler(*self.server_socket.accept())
+                client_handler = CClientHandler(*self.server_socket.accept(),None)
                 client_handler.start()
                 self.clients.append(client_handler)
         except Exception as e:
@@ -77,11 +77,11 @@ class CServerBL():
 
 # This class handle every client in a different thread.
 class CClientHandler(threading.Thread): #  Inherits  from BASE class Threading.Thread
-    def __init__(self, client_socket: socket.socket, client_address: socket, table_callback) -> None:
+    def __init__(self, client_socket: socket.socket, client_address, table_callback) -> None:
         super().__init__()
         
         self.client_socket: socket.socket = client_socket
-        self.client_address: socket._Address  = client_address
+        self.client_address  = client_address
         self.connected = False
         self.table_callback = table_callback
     # This code run for every client in a different thread
