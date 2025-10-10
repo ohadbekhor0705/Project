@@ -52,8 +52,6 @@ It combines **network programming**, **data encryption**, and a **graphical user
 
 ├── GUIDesign.PNG             # Interface mockup
 
-├── Cyber-protection-and-operating-systems-Project.pdf  # Project report
-
 ├── תיק פרוייקט.DOCX          # Hebrew version of project document
 
 └── README.md

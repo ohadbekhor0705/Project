@@ -3,7 +3,6 @@ from tkinter import ttk
 from CClientBL import CClientBL
 import threading
 
-FONT: tuple[str, int] = ("Helvetica",24)
 
 class CClientGUI(CClientBL):
 
@@ -13,6 +12,7 @@ class CClientGUI(CClientBL):
         Ctk.set_appearance_mode("Light")
         self.tab_view = None
         self.master = Ctk.CTk()
+        self.FONT: tuple[str, int] = ("Helvetica",24)
         # Login Frame widgets
         self._usernameLabel = None
         self._usernameEntry = None
@@ -39,7 +39,6 @@ class CClientGUI(CClientBL):
 
     def create_ui(self) -> None:
         
-        global FONT
         self.master.geometry(f"{self.width}x{self.height}")
         # Create Tabs
         self.tab_view = Ctk.CTkTabview(master=self.master)
@@ -58,23 +57,25 @@ class CClientGUI(CClientBL):
 
     def create_StorageFrame(self) -> Ctk.CTkFrame:
         # creating STORAGE UI widgets:
+
         StorageFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.tab_view.tab("StorageGUI"))
-        self._title = Ctk.CTkLabel(StorageFrame, text="Hi, {username}", anchor="center",font=FONT)
+
+        self._title = Ctk.CTkLabel(StorageFrame, text="Hi, {username}", anchor="center",font=self.FONT)
         self._title.place(relx=0.5, rely=0.04, anchor="center") 
 
-        self._searchbar = Ctk.CTkEntry(StorageFrame, placeholder_text= "Search for files...", font = FONT)
+        self._searchbar = Ctk.CTkEntry(StorageFrame, placeholder_text= "Search for files...", font = self.FONT)
         self._searchbar.place(relx = 0.1, rely=0.1, relheight=0.06, relwidth=0.65)
 
-        self._search_button = Ctk.CTkButton(StorageFrame, text="⌕", font=FONT)
+        self._search_button = Ctk.CTkButton(StorageFrame, text="🔍", font=self.FONT)
         self._search_button.place(relx= 0.77, rely=0.1, relheight=0.06, relwidth=0.2)  
 
-        self._uploadfile_button = Ctk.CTkButton(StorageFrame, text= "Upload File", font = FONT, anchor="center")
+        self._uploadfile_button = Ctk.CTkButton(StorageFrame, text= "Upload 📤", font = self.FONT, anchor="center")
         self._uploadfile_button.place(relx= 0.1, rely=0.22, relheight=0.06, relwidth=0.15) 
 
-        self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save File", font=FONT, anchor="center")
+        self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save 💾", font=self.FONT, anchor="center")
         self._savefile_button.place(relx= 0.35, rely=0.22, relheight=0.06, relwidth=0.15)  
 
-        self._deletefile_button = Ctk.CTkButton(StorageFrame, text="Delete File", font=FONT, anchor="center")
+        self._deletefile_button = Ctk.CTkButton(StorageFrame, text="Delete 🗑️", font=self.FONT, anchor="center")
         self._deletefile_button.place(relx=0.6, rely=0.22, relheight=0.06, relwidth=0.15)
 
         # Create Custom styling
@@ -91,49 +92,51 @@ class CClientGUI(CClientBL):
 
         return StorageFrame
     
-
     def create_LoginFrame(self) ->Ctk.CTkFrame:
-        global FONT
         
         # creating Login UI widgets:
 
         LoginFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.tab_view.tab("Login"))
 
-        self._usernameLabel = Ctk.CTkLabel(LoginFrame, text="Username:", font=FONT, anchor="center")
+        self._usernameLabel = Ctk.CTkLabel(LoginFrame, text="Username:", font=self.FONT, anchor="center")
         self._usernameLabel.place(relx = 0.1, rely = 0.15, relheight=0.06, relwidth=0.15)
 
-        self._usernameEntry = Ctk.CTkEntry(LoginFrame, placeholder_text="Username", font=FONT)
+        self._usernameEntry = Ctk.CTkEntry(LoginFrame, placeholder_text="Username", font=self.FONT)
         self._usernameEntry.place(relx=0.24, rely=0.15, relheight=0.06, relwidth=0.15)
 
-
-        self._passwordLabel = Ctk.CTkLabel(LoginFrame,text= "Password:", font = FONT, anchor="center")
+        self._passwordLabel = Ctk.CTkLabel(LoginFrame,text= "Password:", font = self.FONT, anchor="center")
         self._passwordLabel.place(relx = 0.1, rely=0.27, relheight=0.06, relwidth=0.15)
 
-        self._passwordEntry = Ctk.CTkEntry(LoginFrame, placeholder_text="Password", font= FONT)
+        self._passwordEntry = Ctk.CTkEntry(LoginFrame, placeholder_text="Password", font= self.FONT)
         self._passwordEntry.place(relx = 0.24, rely = 0.27, relheight=0.06, relwidth=0.15)
 
-        self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_login).start())
+        self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_login).start())
         self._loginButton.place(relx=0.1, rely=0.37, relheight=0.06,relwidth= 0.30)
 
 
         return LoginFrame
 
-    def run(self) -> None: 
-        self.master.mainloop()
+    def run(self) -> None: self.master.mainloop()
 
     def on_click_login(self) -> None:
-        username = self._usernameEntry.get()
-        password = self._usernameEntry.get() 
-
-        self.client_socket = self.connect(username,password)
+        username: str = self._usernameEntry.get().lstrip()
+        password: str = self._usernameEntry.get().lstrip()
+        
+        if not username or not password:
+            self._loginButton.configure(text="You must fill all the fields")
+            return
+        self._loginButton.configure(text="Connecting....")
+        response , self.client_socket = self.connect(username,password)
         if self.client_socket:
-            print(f"connected! {self.client_socket}")
-            self._title.configure(text=f"Hello {username}!")
             self._loginButton.configure(state=Ctk.DISABLED)
+        self._loginButton.configure(text=response)
+        
+        
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         App = CClientGUI()
         App.run()
-    except KeyboardInterrupt: 
+    except KeyboardInterrupt: # Ctrl + C
         exit()
