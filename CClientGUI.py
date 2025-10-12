@@ -144,7 +144,8 @@ class CClientGUI(CClientBL):
         self._messageBox.configure(text=response)
         
     def remember_action(self, action: str, **user_data)  -> None:
-        remember: bool = bool(self._checkBox.get())
+        remember: bool = self._checkBox.get() == True
+        print(remember)
         try:
             if action == "SAVE":
                 with open ("./user.json","w") as json_file:
