@@ -4,18 +4,17 @@ import cryptography
 import sqlite3
 import json
 import os
-
-
-
+from tkinter.ttk import Treeview
+from typing import Callable,List,Tuple
 
 class CServerBL():
     def __init__(self) -> None:
         self._ip: str = "0.0.0.0"
-        self._port = 5000
-        self.server_socket = None
-        self.run = False
+        self._port: int = 5000
+        self.server_socket: socket.socket = None
+        self.clients_table: Treeview = None
         # save list of clients
-        self.clients: list[CClientHandler] =  []
+        self.clients: List[CClientHandler]  =  []
         with sqlite3.connect("Database.db") as conn:
             # create tables if not exist
             cur = conn.executescript(
@@ -41,8 +40,6 @@ class CServerBL():
                 );
                 """
             )
-
-
             conn.commit()
         storage_folder_name = "./StorageFiles"
         if not os.path.exists(storage_folder_name):
@@ -57,37 +54,37 @@ class CServerBL():
             self.run = True
             print(f"[SERVER] is running at \nIP: {socket.gethostbyname(socket.gethostname())} \nPORT: {self._port}")
             while self.run and self.server_socket is not None:
-                client_handler = CClientHandler(*self.server_socket.accept(),None)
+                client_handler = CClientHandler(*self.server_socket.accept(),self.table_callback)
                 client_handler.start()
                 self.clients.append(client_handler)
         except Exception as e:
             print(e)
     
-    def stop_server(self):
+    def stop_server(self) -> None:
         for client in self.clients:
             client.join()
-        if self.run:
-            self.run = False
         if self.server_socket:
             self.server_socket = None
         self.clients = []
-    def table_callback(self) -> None:
+    
+    def table_callback(self, c_socket:socket.socket, action: str) -> None:
         pass
 
 
 # This class handle every client in a different thread.
 class CClientHandler(threading.Thread): #  Inherits  from BASE class Threading.Thread
-    def __init__(self, client_socket: socket.socket, client_address, table_callback) -> None:
+    def __init__(self, client_socket: socket.socket, client_address, table_callback: Callable[[socket.socket,str],None]) -> None:
         super().__init__()
         
         self.client_socket: socket.socket = client_socket
-        self.client_address  = client_address
+        self.client_address: Tuple[str,int,int]  = client_address
         self.connected = False
-        self.table_callback = table_callback
+        self.table_callback: Callable[[socket.socket, str], None]= table_callback
     # This code run for every client in a different thread
     def run(self) -> None:
 
         self.connected = True
+        self.table_callback(self.client_socket,"add")
         # Server functionality here
         while self.connected:
             pass

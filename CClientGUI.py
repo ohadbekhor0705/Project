@@ -2,7 +2,8 @@ import customtkinter as Ctk
 from tkinter import ttk
 from CClientBL import CClientBL
 import threading
-
+import json
+import os
 
 class CClientGUI(CClientBL):
 
@@ -98,6 +99,9 @@ class CClientGUI(CClientBL):
 
         LoginFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.tab_view.tab("Login"))
 
+        self._messageBox = Ctk.CTkLabel(LoginFrame, text="",font=self.FONT)
+        self._messageBox.place(relx = 0.07, rely = 0.05, relheight=0.06, relwidth=0.4)
+        
         self._usernameLabel = Ctk.CTkLabel(LoginFrame, text="Username:", font=self.FONT, anchor="center")
         self._usernameLabel.place(relx = 0.1, rely = 0.15, relheight=0.06, relwidth=0.15)
 
@@ -107,11 +111,18 @@ class CClientGUI(CClientBL):
         self._passwordLabel = Ctk.CTkLabel(LoginFrame,text= "Password:", font = self.FONT, anchor="center")
         self._passwordLabel.place(relx = 0.1, rely=0.27, relheight=0.06, relwidth=0.15)
 
-        self._passwordEntry = Ctk.CTkEntry(LoginFrame, placeholder_text="Password", font= self.FONT)
+        self._passwordEntry = Ctk.CTkEntry(LoginFrame, placeholder_text="Password", font= self.FONT, show="*")
         self._passwordEntry.place(relx = 0.24, rely = 0.27, relheight=0.06, relwidth=0.15)
+        
+        self._checkBox = Ctk.CTkCheckBox(LoginFrame, text="Remember me?",offvalue="False", onvalue="True" ,font=self.FONT)
+        self._checkBox.place(relx=0.12, rely=0.37, relheight=0.06,relwidth= 0.3)
+        self.remember_action("SET")
 
         self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_login).start())
-        self._loginButton.place(relx=0.1, rely=0.37, relheight=0.06,relwidth= 0.30)
+        self._loginButton.place(relx=0.1, rely=0.47, relheight=0.06,relwidth= 0.135)
+        
+        self._registerButton = Ctk.CTkButton(LoginFrame, text="Register", font=self.FONT, anchor="center")
+        self._registerButton.place(relx=0.24, rely=0.47, relheight=0.06,relwidth= 0.135)
 
 
         return LoginFrame
@@ -120,19 +131,45 @@ class CClientGUI(CClientBL):
 
     def on_click_login(self) -> None:
         username: str = self._usernameEntry.get().lstrip()
-        password: str = self._usernameEntry.get().lstrip()
+        password: str = self._passwordEntry.get().lstrip()
         
         if not username or not password:
-            self._loginButton.configure(text="You must fill all the fields")
+            self._messageBox.configure(text="You must fill all the fields!")
             return
-        self._loginButton.configure(text="Connecting....")
+        self.remember_action("SAVE",username=username,password=password)
+        self._messageBox.configure(text="Connecting....")
         response , self.client_socket = self.connect(username,password)
         if self.client_socket:
-            self._loginButton.configure(state=Ctk.DISABLED)
-        self._loginButton.configure(text=response)
+            self._messageBox.configure(state=Ctk.DISABLED)
+        self._messageBox.configure(text=response)
         
-        
+    def remember_action(self, action: str, **user_data)  -> None:
+        remember: bool = bool(self._checkBox.get())
+        try:
+            if action == "SAVE":
+                with open ("./user.json","w") as json_file:
+                    json.dump(
+                        {
+                            "remember": remember,
+                            "username": user_data["username"],
+                            "password": user_data["password"]
+                        },
+                        json_file,
+                        indent=4
+                    )
+            elif action == "SET" and os.path.exists("./user.json"):
+                with open("./user.json", "r") as json_file:
+                    values: dict = json.load(json_file)
+                    print(values["remember"])
+                    if values["remember"]:
+                        self._usernameEntry.insert(0,values["username"])
+                        self._passwordEntry.insert(0, values["password"])
+                        self._checkBox.select()
+            else:
+                raise Exception("WRONG CHECKBOX COMMAND!")
 
+        except Exception as e:
+            print(e)
 
 if __name__ == "__main__":
     try:
