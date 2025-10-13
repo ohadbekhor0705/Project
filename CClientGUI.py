@@ -9,6 +9,8 @@ class CClientGUI(CClientBL):
 
     def __init__(self) -> None:
         super().__init__()
+        # Load a custom color theme file for customtkinter. This points to the bundled theme JSON.
+        # If the path is wrong the library will fall back to defaults, so keep the file with the project.
         Ctk.set_default_color_theme("./themes/rime.json")
         Ctk.set_appearance_mode("Light")
         self.tab_view = None
@@ -48,14 +50,15 @@ class CClientGUI(CClientBL):
         self.master.geometry(f"{self.width}x{self.height}")
         # Create Tabs
         self.tab_view = Ctk.CTkTabview(master=self.master)
+        # Accessing the internal segmented button to change the tab font size.
+        # This uses a protected member of the widget (_segmented_button) because the
+        # public API doesn't expose segmented button font configuration directly.
+        # Risk: future versions of customtkinter may rename/remove this attribute.
         self.tab_view._segmented_button.configure(font=Ctk.CTkFont(size=32, weight="bold"))
         self.tab_view.pack(expand=True, fill="both")
         self.tab_view.add("Login") 
-        self.tab_view.add("StorageGUI") 
-        # Create Frames
-        self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
-        self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
 
+        # Create Login Frame
         self.LoginFrame: Ctk.CTkFrame = self.create_LoginFrame()
         self.LoginFrame.pack(expand=True, fill="both", padx=10, pady=10)
 
@@ -121,8 +124,13 @@ class CClientGUI(CClientBL):
         
         self._checkBox = Ctk.CTkCheckBox(LoginFrame, text="Remember me?",offvalue="False", onvalue="True" ,font=self.FONT)
         self._checkBox.place(relx=0.12, rely=0.37, relheight=0.06,relwidth= 0.3)
+        # Attempt to pre-fill username/password from a local file if the user previously
+        # selected "Remember me". This reads ./user.json and inserts values in the fields.
+        # If the file doesn't exist nothing happens.
         self.remember_action(self.GET)
 
+        # Run login in a background thread so the UI stays responsive during network calls.
+        # Using lambda to create and start a Thread avoids blocking the mainloop.
         self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_login).start())
         self._loginButton.place(relx=0.1, rely=0.47, relheight=0.06,relwidth= 0.135)
         
@@ -145,9 +153,16 @@ class CClientGUI(CClientBL):
         self._messageBox.configure(text="Connecting....")
         self._loginButton.configure(state=Ctk.DISABLED)
         self._registerButton.configure(state=Ctk.DISABLED)
+        # We call it from the background thread started by the button command above.
         response , self.client_socket = self.connect(username,password)
         if self.client_socket:
-            self._messageBox.configure(state=Ctk.DISABLED)
+            # Create Storage Frame and adding to tab view:
+            self.tab_view.add("StorageGUI")
+            self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
+            self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
+            self._title.config(text = f"Hi, {username}")
+            self._messageBox.configure(text=f"Welcome back, {username}")
+            self._checkBox.configure(state=Ctk.DISABLED)
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
@@ -158,8 +173,9 @@ class CClientGUI(CClientBL):
         try: 
             
             if action == self.SAVE:
-                remember = bool(self._checkBox.get())
+                remember: bool = self._checkBox.get() == "True"
                 if remember:
+                    # Store credentials locally in a simple JSON file so they can be
                     with open ("./user.json","w") as json_file:
                         json.dump(
                             {
@@ -170,12 +186,15 @@ class CClientGUI(CClientBL):
                             json_file,
                             indent=4
                         )
-                else:
-                    os.remove("./user.json")
+                if not remember:
+                    if os.path.exists("./user.json"): 
+                        os.remove("./user.json")
             elif action == self.GET and os.path.exists("./user.json"):
                 with open("./user.json", "r") as json_file:
                     values: dict = json.load(json_file)
                     if values["remember"]:
+                        # Insert saved credentials into the entry widgets and check the box.
+                        # Using insert(0, ...) places the text at the start of the field.
                         self._usernameEntry.insert(0,values["username"])
                         self._passwordEntry.insert(0, values["password"])
                         self._checkBox.select()
