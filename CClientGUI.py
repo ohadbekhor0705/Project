@@ -34,8 +34,13 @@ class CClientGUI(CClientBL):
         self.LoginFrame: Ctk.CTkFrame = None 
         
         self.height, self.width = 750, 1300
+        self.SAVE = "SAVE"
+        self.GET = "GET"
         
         self.create_ui()
+        
+
+        
     
 
     def create_ui(self) -> None:
@@ -116,7 +121,7 @@ class CClientGUI(CClientBL):
         
         self._checkBox = Ctk.CTkCheckBox(LoginFrame, text="Remember me?",offvalue="False", onvalue="True" ,font=self.FONT)
         self._checkBox.place(relx=0.12, rely=0.37, relheight=0.06,relwidth= 0.3)
-        self.remember_action("SET")
+        self.remember_action(self.GET)
 
         self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_login).start())
         self._loginButton.place(relx=0.1, rely=0.47, relheight=0.06,relwidth= 0.135)
@@ -136,38 +141,44 @@ class CClientGUI(CClientBL):
         if not username or not password:
             self._messageBox.configure(text="You must fill all the fields!")
             return
-        self.remember_action("SAVE",username=username,password=password)
+        self.remember_action(self.SAVE,username=username,password=password)
         self._messageBox.configure(text="Connecting....")
+        self._loginButton.configure(state=Ctk.DISABLED)
+        self._registerButton.configure(state=Ctk.DISABLED)
         response , self.client_socket = self.connect(username,password)
         if self.client_socket:
             self._messageBox.configure(state=Ctk.DISABLED)
+        else:
+            self._loginButton.configure(state=Ctk.NORMAL)
+            self._registerButton.configure(state=Ctk.NORMAL)
         self._messageBox.configure(text=response)
         
     def remember_action(self, action: str, **user_data)  -> None:
-        remember: bool = self._checkBox.get() == True
-        print(remember)
-        try:
-            if action == "SAVE":
-                with open ("./user.json","w") as json_file:
-                    json.dump(
-                        {
-                            "remember": remember,
-                            "username": user_data["username"],
-                            "password": user_data["password"]
-                        },
-                        json_file,
-                        indent=4
-                    )
-            elif action == "SET" and os.path.exists("./user.json"):
+       
+        try: 
+            
+            if action == self.SAVE:
+                remember = bool(self._checkBox.get())
+                if remember:
+                    with open ("./user.json","w") as json_file:
+                        json.dump(
+                            {
+                                "remember": remember,
+                                "username": user_data["username"],
+                                "password": user_data["password"]
+                            },
+                            json_file,
+                            indent=4
+                        )
+                else:
+                    os.remove("./user.json")
+            elif action == self.GET and os.path.exists("./user.json"):
                 with open("./user.json", "r") as json_file:
                     values: dict = json.load(json_file)
-                    print(values["remember"])
                     if values["remember"]:
                         self._usernameEntry.insert(0,values["username"])
                         self._passwordEntry.insert(0, values["password"])
                         self._checkBox.select()
-            else:
-                raise Exception("WRONG CHECKBOX COMMAND!")
 
         except Exception as e:
             print(e)
