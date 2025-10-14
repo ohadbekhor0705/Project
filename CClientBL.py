@@ -22,3 +22,8 @@ class CClientBL():
             return "Could'nt connect to server!",None
     def disconnect(self) -> None:
             pass
+
+
+if __name__ == "__main__":
+    client = CClientBL()
+    print(client.connect("username","password"))

@@ -40,9 +40,6 @@ class CClientGUI(CClientBL):
         self.GET = "GET"
         
         self.create_ui()
-        
-
-        
     
 
     def create_ui(self) -> None:
@@ -52,8 +49,6 @@ class CClientGUI(CClientBL):
         self.tab_view = Ctk.CTkTabview(master=self.master)
         # Accessing the internal segmented button to change the tab font size.
         # This uses a protected member of the widget (_segmented_button) because the
-        # public API doesn't expose segmented button font configuration directly.
-        # Risk: future versions of customtkinter may rename/remove this attribute.
         self.tab_view._segmented_button.configure(font=Ctk.CTkFont(size=32, weight="bold"))
         self.tab_view.pack(expand=True, fill="both")
         self.tab_view.add("Login") 
@@ -81,16 +76,26 @@ class CClientGUI(CClientBL):
         self._uploadfile_button = Ctk.CTkButton(StorageFrame, text= "Upload 📤", font = self.FONT, anchor="center")
         self._uploadfile_button.place(relx= 0.1, rely=0.22, relheight=0.06, relwidth=0.15) 
 
-        self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save 💾", font=self.FONT, anchor="center")
+        self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save 💾", font=self.FONT, anchor="center", state="disabled")
         self._savefile_button.place(relx= 0.35, rely=0.22, relheight=0.06, relwidth=0.15)  
 
-        self._deletefile_button = Ctk.CTkButton(StorageFrame, text="Delete 🗑️", font=self.FONT, anchor="center")
+        self._deletefile_button = Ctk.CTkButton(StorageFrame, text="Delete 🗑️", font=self.FONT, anchor="center", state="disabled")
         self._deletefile_button.place(relx=0.6, rely=0.22, relheight=0.06, relwidth=0.15)
 
-        # Create Custom styling
-        style = ttk.Style()
-        style.configure("Treeview", font=("Arial", 15))    # Table font
-        style.configure("Treeview.Heading", font=("Arial", 25, "bold"))  # Header styling
+        style = ttk.Style() 
+        style.theme_use("default")
+        # https://github.com/TomSchimansky/CustomTkinter/discussions/431
+        style.configure("Treeview",
+                            background="#2a2d2e",
+                            foreground="white",
+                            rowheight=30,
+                            fieldbackground="#6E8BA4",
+                            bordercolor="#6E8BA4",
+                            borderwidth=0, font=("Helvetica",16))
+        style.map('Treeview', background=[('selected', '#22559b')])
+    
+        style.configure("Treeview.Heading",background="#009dff",foreground="white",relief="flat", font=self.FONT)
+        style.map("Treeview.Heading",background=[('active', '#3484F0')])
         columns = ("file name", "file size (MB)", "Date modified")
         self._filestbl = ttk.Treeview(StorageFrame, columns=columns, show="headings")
         for col in columns:
@@ -160,9 +165,8 @@ class CClientGUI(CClientBL):
             self.tab_view.add("StorageGUI")
             self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
             self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
-            self._title.config(text = f"Hi, {username}")
+            self._title.configure(text = f"Hi, {username}")
             self._messageBox.configure(text=f"Welcome back, {username}")
-            self._checkBox.configure(state=Ctk.DISABLED)
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
@@ -204,6 +208,7 @@ class CClientGUI(CClientBL):
 
 if __name__ == "__main__":
     try:
+        print("Press Ctrl + C to exit.")
         App = CClientGUI()
         App.run()
     except KeyboardInterrupt: # Ctrl + C

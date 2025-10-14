@@ -13,8 +13,10 @@ class CServerBL():
         self._port: int = 5000
         self.server_socket: socket.socket = None
         self.clients_table: Treeview = None
-        # save list of clients
+                # save list of clients
         self.clients: List[CClientHandler]  =  []
+        self.event = threading.Event()
+        self.main_thread: threading.Thread = None
         with sqlite3.connect("Database.db") as conn:
             # create tables if not exist
             cur = conn.executescript(
@@ -47,51 +49,83 @@ class CServerBL():
 
     # Start the server
     def start_server(self) ->  None:
+        print(self)
         try:
+            self.event.set()
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
             self.server_socket.bind((self._ip, self._port))
             self.server_socket.listen(5)
-            self.run = True
             print(f"[SERVER] is running at \nIP: {socket.gethostbyname(socket.gethostname())} \nPORT: {self._port}")
-            while self.run and self.server_socket is not None:
+            print(self)
+            while self.event.is_set() and self.server_socket is not None:
                 client_handler = CClientHandler(*self.server_socket.accept(),self.table_callback)
                 client_handler.start()
                 self.clients.append(client_handler)
+        except OSError as e:
+            pass
         except Exception as e:
-            print(e)
+            print(f"[ServerBL] Exception at start_server(): {e}")
     
     def stop_server(self) -> None:
-        for client in self.clients:
-            client.join()
-        if self.server_socket:
-            self.server_socket = None
-        self.clients = []
+        print(f"[ServerBL] stop_server() called")
+        try:
+            self.event.clear()
+            print(f"[ServerBL] cleared flag!")
+            if len(self.clients) > 0:
+                for client in self.clients:
+                    print(f"closing {client.client_address}")
+                    client.disconnect()
+                    client.join()
+                self.clients = []
+                self.clients_table.delete(*self.clients_table.get_children())
+            
+            if self.server_socket is not None:
+                self.server_socket.close()
+                self.server_socket = None
+            
+            self.main_thread = None
+        except Exception as e:
+            print(f"[ServerBL] Exception at close_server(): {e}")
     
-    def table_callback(self, c_socket:socket.socket, action: str) -> None:
-        pass
+    def table_callback(self, c_socket:socket.socket,addr ,action: str) -> None:
+        if action == "add":
+            self.clients_table.insert("", "end", values=(socket.gethostbyaddr(addr[0])[0],addr[0],"None","❌"))
+    
 
+    def __repr__ (self) -> str:
+        return f"<Server(ip={self._ip}, port={self._port}, flag={self.event.is_set()}, {self.server_socket})>"
 
 # This class handle every client in a different thread.
 class CClientHandler(threading.Thread): #  Inherits  from BASE class Threading.Thread
-    def __init__(self, client_socket: socket.socket, client_address, table_callback: Callable[[socket.socket,str],None]) -> None:
+    def __init__(self, client_socket: socket.socket, client_address, table_callback: Callable[[socket.socket,Tuple[str, int],str],None]) -> None:
         super().__init__()
         
         self.client_socket: socket.socket = client_socket
-        self.client_address: Tuple[str,int,int]  = client_address
+        self.client_address: Tuple[str,int]  = client_address
         self.connected = False
-        self.table_callback: Callable[[socket.socket, str], None]= table_callback
+        self.table_callback: Callable[[socket.socket, Tuple[str, int], str], None]= table_callback
     # This code run for every client in a different thread
     def run(self) -> None:
-
         self.connected = True
-        self.table_callback(self.client_socket,"add")
+        self.table_callback(self.client_socket,self.client_address,"add")
         # Server functionality here
         while self.connected:
-            pass
+            try:
+                pass
+            except Exception as e:
+                print(f"[ClientHandler] Exception at run(): {e}")
+    def disconnect(self):
+        self.connected = False
 
 
 
 
 if __name__ == "__main__":
-    server = CServerBL()
-    server.start_server()
+    try:
+        print("Press Ctrl + C to exit.")
+        server = CServerBL()
+        server.main_thread = threading.Thread(target=server.start_server)
+        server.main_thread.start()
+    except KeyboardInterrupt:
+        print("closing program")
+        exit()
