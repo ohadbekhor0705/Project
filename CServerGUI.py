@@ -2,7 +2,7 @@ import customtkinter as CTk
 from tkinter import ttk
 from CServerBL import CServerBL
 import threading
-
+from protocol import *
 class CServerGUI(CServerBL):
     def __init__(self) -> None:
         super().__init__()
@@ -62,18 +62,18 @@ class CServerGUI(CServerBL):
 
     def toggle_server(self):
         if self.serverSwitch.get() == "on":
-            print("on")
+            write_to_log("on")
             self.main_thread = threading.Thread(target=self.start_server)
             self.main_thread.start()
         if self.serverSwitch.get() == "off":
-            print("off")
+            write_to_log("off")
             self.stop_server()
 
-    def start(self) -> None:
+    def run(self) -> None:
         self.master.mainloop()
 
 
 if __name__ == "__main__":
     App = CServerGUI()
-    App.start()
+    App.run()
     exit()

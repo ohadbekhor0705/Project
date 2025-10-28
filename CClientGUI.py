@@ -1,9 +1,12 @@
 import customtkinter as Ctk
 from tkinter import ttk
+from tkinter import filedialog as fd
 from CClientBL import CClientBL
 import threading
 import json
 import os
+from time import sleep
+from protocol import *
 
 class CClientGUI(CClientBL):
 
@@ -13,7 +16,6 @@ class CClientGUI(CClientBL):
         # If the path is wrong the library will fall back to defaults, so keep the file with the project.
         Ctk.set_default_color_theme("./themes/rime.json")
         Ctk.set_appearance_mode("Light")
-        self.tab_view = None
         self.master = Ctk.CTk()
         self.FONT: tuple[str, int] = ("Helvetica",24)
         # Login Frame widgets
@@ -46,23 +48,16 @@ class CClientGUI(CClientBL):
         
         self.master.geometry(f"{self.width}x{self.height}")
         # Create Tabs
-        self.tab_view = Ctk.CTkTabview(master=self.master)
-        # Accessing the internal segmented button to change the tab font size.
-        # This uses a protected member of the widget (_segmented_button) because the
-        self.tab_view._segmented_button.configure(font=Ctk.CTkFont(size=32, weight="bold"))
-        self.tab_view.pack(expand=True, fill="both")
-        self.tab_view.add("Login") 
-
-        # Create Login Frame
-        self.LoginFrame: Ctk.CTkFrame = self.create_LoginFrame()
-        self.LoginFrame.pack(expand=True, fill="both", padx=10, pady=10)
-
         self.master.resizable(False, False)
+
+        self.LoginFrame = self.create_LoginFrame()
+        self.LoginFrame.pack(fil="both", expand=True, padx=10, pady=10)
+        self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
 
     def create_StorageFrame(self) -> Ctk.CTkFrame:
         # creating STORAGE UI widgets:
 
-        StorageFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.tab_view.tab("StorageGUI"))
+        StorageFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.master)
 
         self._title = Ctk.CTkLabel(StorageFrame, text="Hi, {username}", anchor="center",font=self.FONT)
         self._title.place(relx=0.5, rely=0.04, anchor="center") 
@@ -73,7 +68,7 @@ class CClientGUI(CClientBL):
         self._search_button = Ctk.CTkButton(StorageFrame, text="🔍", font=self.FONT)
         self._search_button.place(relx= 0.77, rely=0.1, relheight=0.06, relwidth=0.2)  
 
-        self._uploadfile_button = Ctk.CTkButton(StorageFrame, text= "Upload 📤", font = self.FONT, anchor="center")
+        self._uploadfile_button = Ctk.CTkButton(StorageFrame, text= "Upload 📤", font = self.FONT, anchor="center", command=self.on_click_Upload)
         self._uploadfile_button.place(relx= 0.1, rely=0.22, relheight=0.06, relwidth=0.15) 
 
         self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save 💾", font=self.FONT, anchor="center", state="disabled")
@@ -110,7 +105,7 @@ class CClientGUI(CClientBL):
         
         # creating Login UI widgets:
 
-        LoginFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.tab_view.tab("Login"))
+        LoginFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.master)
 
         self._messageBox = Ctk.CTkLabel(LoginFrame, text="",font=self.FONT)
         self._messageBox.place(relx = 0.07, rely = 0.05, relheight=0.06, relwidth=0.4)
@@ -139,7 +134,7 @@ class CClientGUI(CClientBL):
         self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_login).start())
         self._loginButton.place(relx=0.1, rely=0.47, relheight=0.06,relwidth= 0.135)
         
-        self._registerButton = Ctk.CTkButton(LoginFrame, text="Register", font=self.FONT, anchor="center")
+        self._registerButton = Ctk.CTkButton(LoginFrame, text="Register", font=self.FONT, anchor="center", command=lambda: threading.Thread(target=self.on_click_register))
         self._registerButton.place(relx=0.24, rely=0.47, relheight=0.06,relwidth= 0.135)
 
 
@@ -159,19 +154,55 @@ class CClientGUI(CClientBL):
         self._loginButton.configure(state=Ctk.DISABLED)
         self._registerButton.configure(state=Ctk.DISABLED)
         # We call it from the background thread started by the button command above.
-        response , self.client_socket = self.connect(username,password)
+        response , self.client_socket = self.connect(username,password,"login")
+        if self.client_socket:
+            # Create Storage Frame:
+            self.LoginFrame.forget()
+            self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
+            self._title.configure(text = response)
+            threading.Thread(target=self.check_connection).start()
+        else:
+            self._loginButton.configure(state=Ctk.NORMAL)
+            self._registerButton.configure(state=Ctk.NORMAL)
+        self._messageBox.configure(text=response)
+    def on_click_register(self):
+        username: str = self._usernameEntry.get().lstrip()
+        password: str = self._passwordEntry.get().lstrip()
+        
+        if not username or not password:
+            self._messageBox.configure(text="You must fill all the fields!")
+            return
+        self.remember_action(self.SAVE,username=username,password=password)
+        self._messageBox.configure(text="Connecting....")
+        self._loginButton.configure(state=Ctk.DISABLED)
+        self._registerButton.configure(state=Ctk.DISABLED)
+        # We call it from the background thread started by the button command above.
+        response , self.client_socket = self.connect(username,password,"register")
         if self.client_socket:
             # Create Storage Frame and adding to tab view:
-            self.tab_view.add("StorageGUI")
             self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
             self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
-            self._title.configure(text = f"Hi, {username}")
-            self._messageBox.configure(text=f"Welcome back, {username}")
+            self._title.configure(text = response)
+            threading.Thread(target=self.check_connection, daemon=True).start()
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
         self._messageBox.configure(text=response)
         
+    def on_click_Upload(self):
+        
+        filename = fd.askopenfilename(
+        title="Open a file",
+        filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )   
+        with open(filename,"rb") as f:
+            self._filestbl.insert("","end",
+                    values=(
+                    f.name.split("/")[-1] ,
+                    int(os.path.getsize(filename)/ (1024 * 1024)),
+                    "")
+                                )   
+    
     def remember_action(self, action: str, **user_data)  -> None:
        
         try: 
@@ -204,11 +235,28 @@ class CClientGUI(CClientBL):
                         self._checkBox.select()
 
         except Exception as e:
-            print(e)
+            write_to_log(e)
+
+    def check_connection(self):
+        while True:
+            try:
+                # Send a test message to server
+                write_to_log("Checking Server connection....")
+                self.client_socket.send(b"")
+                sleep(5)  # Check every 5 seconds
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, ConnectionRefusedError):
+                
+                # If connection fails, return to login screen
+                self.StorageFrame.forget()
+                self.LoginFrame.pack(fill="both", expand=True, padx=10, pady=10)
+                self._messageBox.configure(text="Connection lost")
+                self._loginButton.configure(state=Ctk.NORMAL)
+                self._registerButton.configure(state=Ctk.NORMAL)
+                break
 
 if __name__ == "__main__":
     try:
-        print("Press Ctrl + C to exit.")
+        write_to_log("Press Ctrl + C to exit.")
         App = CClientGUI()
         App.run()
     except KeyboardInterrupt: # Ctrl + C
