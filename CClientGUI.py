@@ -6,10 +6,9 @@ import threading
 import json
 import os
 from time import sleep
-from protocol import *
-
+import bcrypt
 class CClientGUI(CClientBL):
-
+    
     def __init__(self) -> None:
         super().__init__()
         # Load a custom color theme file for customtkinter. This points to the bundled theme JSON.
@@ -177,7 +176,8 @@ class CClientGUI(CClientBL):
         self._loginButton.configure(state=Ctk.DISABLED)
         self._registerButton.configure(state=Ctk.DISABLED)
         # We call it from the background thread started by the button command above.
-        response , self.client_socket = self.connect(username,password,"register")
+        hashed_password = bcrypt.hashpw(password.encode(),bcrypt.gensalt())
+        response , self.client_socket = self.connect(username,hashed_password,"register")
         if self.client_socket:
             # Create Storage Frame and adding to tab view:
             self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()

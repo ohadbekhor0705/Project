@@ -9,7 +9,27 @@ class CClientBL():
         self.connected: bool = False
         self.client_socket: socket.socket = None
 
-    def connect(self, username: str, password: str, cmd: str) -> Tuple[str, socket.socket]: # Connecting to server with username and password
+    def connect(self, username: str, password: str, cmd: str) -> Tuple[str, socket.socket]:
+        """
+        Establishes a connection to the server and sends authentication credentials.
+        Args:
+            username (str): Username for authentication
+            password (str): Password for authentication 
+            cmd (str): Command to be sent to server
+        Returns:
+            Tuple[str, socket.socket]: A tuple containing:
+                - str: Response message from server
+                - socket.socket: Connected socket object if successful, None if connection fails
+        Raises:
+            Exception: Any network or connection related exceptions that may occur
+        Description:
+            Creates a TCP socket connection to the server specified in self.ADDR
+            Sends JSON encoded credentials and command
+            Receives and parses server response
+            Logs connection status and responses
+            Returns server message and socket if successful
+        """
+        
         try:
             _client_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
             _client_socket.connect(self.ADDR)

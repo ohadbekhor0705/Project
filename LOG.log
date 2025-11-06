@@ -179,3 +179,9 @@ PORT: 5000
 2025-11-03 14:38:27,420 - INFO - [CLIENT_BL] Exception on connect: [WinError 10061] No connection could be made because the target machine actively refused it
 2025-11-03 14:43:07,125 - INFO - Press Ctrl + C to exit.
 2025-11-03 14:43:11,673 - INFO - [CLIENT_BL] Exception on connect: [WinError 10061] No connection could be made because the target machine actively refused it
+2025-11-06 13:08:15,831 - INFO - Press Ctrl + C to exit.
+2025-11-06 13:08:15,854 - INFO - <Server(ip=0.0.0.0, port=5000, flag=False, None)>
+2025-11-06 13:08:15,863 - INFO - [SERVER] is running at 
+IP: 10.100.102.15 
+PORT: 5000
+2025-11-06 13:08:15,863 - INFO - <Server(ip=0.0.0.0, port=5000, flag=True, <socket.socket fd=656, family=2, type=1, proto=0, laddr=('0.0.0.0', 5000)>)>
