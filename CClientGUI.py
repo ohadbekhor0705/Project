@@ -65,7 +65,7 @@ class CClientGUI(CClientBL):
         self._searchbar = Ctk.CTkEntry(StorageFrame, placeholder_text= "Search for files...", font = self.FONT)
         self._searchbar.place(relx = 0.1, rely=0.1, relheight=0.06, relwidth=0.65)
 
-        self._search_button = Ctk.CTkButton(StorageFrame, text="🔍", font=self.FONT)
+        self._search_button = Ctk.CTkButton(StorageFrame, text="🔍", font=self.FONT, command=lambda: self.StorageFrame.forget())
         self._search_button.place(relx= 0.77, rely=0.1, relheight=0.06, relwidth=0.2)  
 
         self._uploadfile_button = Ctk.CTkButton(StorageFrame, text= "Upload 📤", font = self.FONT, anchor="center", command=self.on_click_Upload)
@@ -242,9 +242,9 @@ class CClientGUI(CClientBL):
             try:
                 # Send a test message to server
                 write_to_log("Checking Server connection....")
-                self.client_socket.send(b"")
+                self.client_socket.send(b"ping")
                 sleep(5)  # Check every 5 seconds
-            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, ConnectionRefusedError):
+            except (ConnectionAbortedError):
                 
                 # If connection fails, return to login screen
                 self.StorageFrame.forget()

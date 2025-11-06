@@ -41,4 +41,4 @@ class CClientBL():
 if __name__ == "__main__":
     client = CClientBL()
     write_to_log(client.connect("username","password"))
-    
+     

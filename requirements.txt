@@ -1,4 +1,3 @@
 customtkinter
 cryptography
 uuid
-SQLAlchemy

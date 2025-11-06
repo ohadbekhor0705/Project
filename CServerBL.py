@@ -16,9 +16,30 @@ class CServerBL():
         self.clientHandlers: List[CClientHandler] = []
         self.event = threading.Event()
         self.main_thread: threading.Thread = None
+        with sqlite3.connect("Database.db") as conn:
+            # create tables if not exist
+            cur = conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS users(
+                    user_id INTEGER PRIMARY KEY,
+                    username CHAR(255),
+                    password_hash CHAR(255),
+                    max_storage INT DEFAULT 100000000,
+                    curr_storage INT DEFAULT 0,
+                    tries INT DEFAULT 0,
+                    disabled BOOLEAN DEFAULT 0
+                );
 
 
-        
+                CREATE TABLE IF NOT EXISTS files(
+                file_id CHAR(255) PRIMARY KEY,
+                filename CHAR(255),
+                filesize INTEGER,
+                modified INT,
+                user_id INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+                );
+                """)
         storage_folder_name = "./StorageFiles"
         if not os.path.exists(storage_folder_name):
             os.mkdir(storage_folder_name)
@@ -109,11 +130,11 @@ class CClientHandler(threading.Thread): #  Inherits  from BASE class Threading.T
             except Exception as e:
                 write_to_log(f"[CServerBL] -> [ClientHandler] Exception at run(): {e}")
         self.disconnect()
-    def disconnect(self):
+    def disconnect(self) -> None:
         self.connected = False
         self.client.close()
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<ClientHandler({self.address=}, {self.client=})>"
 
 if __name__ == "__main__":
