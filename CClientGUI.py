@@ -160,7 +160,7 @@ class CClientGUI(CClientBL):
             self.LoginFrame.forget()
             self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
             self._title.configure(text = response)
-            threading.Thread(target=self.check_connection).start()
+           # threading.Thread(target=self.check_connection).start()
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
@@ -181,9 +181,10 @@ class CClientGUI(CClientBL):
         if self.client_socket:
             write_to_log(self.client_socket)
             # Create Storage Frame and adding to tab view:
+            self.LoginFrame.forget()
             self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
             self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
-            threading.Thread(target=self.check_connection, daemon=True).start()
+            #threading.Thread(target=self.check_connection, daemon=True).start()
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
