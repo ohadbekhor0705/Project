@@ -46,7 +46,7 @@ class CServerGUI(CServerBL):
         style.map("Treeview.Heading",background=[('active', '#3484F0')])
         #####
 
-        columns = ("Hostname", "IP Address", "Username", "Status")
+        columns = ("Hostname", "IP Address", "Username")
         self.clients_table = ttk.Treeview(self.master, columns=columns, show="headings")
         for col in columns:
             self.clients_table.heading(col, text=col,anchor="center")

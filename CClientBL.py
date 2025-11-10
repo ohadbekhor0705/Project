@@ -5,10 +5,10 @@ import json
 from protocol import *
 class CClientBL():
     def __init__(self) -> None:
-        self.ADDR = ("127.0.0.1", 5000)
+        self.ADDR = ("127.0.0.1", 9999)
         self.connected: bool = False
         self.client_socket: socket.socket = None
-
+        self.user = {}
     def connect(self, username: str, password: str, cmd: str) -> Tuple[str, socket.socket]:
         """
         Establishes a connection to the server and sends authentication credentials.
@@ -33,20 +33,23 @@ class CClientBL():
         try:
             _client_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
             _client_socket.connect(self.ADDR)
-            _client_socket.send(json.dumps(
-                {
+            self.user = {
                     "username": username,
                     "password": password,
                     "cmd": cmd
-                }).encode()
-            )
+            }
+            _client_socket.send(json.dumps(self.user).encode())
             response = json.loads(_client_socket.recv(1024).decode())
-            write_to_log(response)
+            write_to_log(response is None)
             if response["status"] == True:
+                write_to_log("connected!")
                 write_to_log(f"[CLIENT_BL] {_client_socket.getsockname()} connected")
                 write_to_log(response["message"])
+                print(f"{response["message"]=}")
                 return f"{response["message"]}", _client_socket
-
+            else:
+                self.user = {}
+                return response["message"], None
         except Exception as e:
             write_to_log("[CLIENT_BL] Exception on connect: {}".format(e))
             return "Could'nt connect to server!",None

@@ -7,6 +7,7 @@ import json
 import os
 from time import sleep
 import bcrypt
+from protocol import write_to_log
 class CClientGUI(CClientBL):
     
     def __init__(self) -> None:
@@ -133,7 +134,7 @@ class CClientGUI(CClientBL):
         self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_login).start())
         self._loginButton.place(relx=0.1, rely=0.47, relheight=0.06,relwidth= 0.135)
         
-        self._registerButton = Ctk.CTkButton(LoginFrame, text="Register", font=self.FONT, anchor="center", command=lambda: threading.Thread(target=self.on_click_register))
+        self._registerButton = Ctk.CTkButton(LoginFrame, text="Register", font=self.FONT, anchor="center", command=lambda: threading.Thread(target=self.on_click_register).start())
         self._registerButton.place(relx=0.24, rely=0.47, relheight=0.06,relwidth= 0.135)
 
 
@@ -176,18 +177,18 @@ class CClientGUI(CClientBL):
         self._loginButton.configure(state=Ctk.DISABLED)
         self._registerButton.configure(state=Ctk.DISABLED)
         # We call it from the background thread started by the button command above.
-        hashed_password = bcrypt.hashpw(password.encode(),bcrypt.gensalt())
-        response , self.client_socket = self.connect(username,hashed_password,"register")
+        response , self.client_socket = self.connect(username,password,"register")
         if self.client_socket:
+            write_to_log(self.client_socket)
             # Create Storage Frame and adding to tab view:
             self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
             self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
-            self._title.configure(text = response)
             threading.Thread(target=self.check_connection, daemon=True).start()
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
         self._messageBox.configure(text=response)
+        self._title.configure(text=response)
         
     def on_click_Upload(self):
         
