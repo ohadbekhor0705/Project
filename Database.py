@@ -1,7 +1,11 @@
-from protocol import write_to_log
-import sqlite3
-import bcrypt
-from typing import Dict, Tuple, Any, overload
+try:
+    from protocol import write_to_log
+    import sqlite3
+    import bcrypt
+    from typing import Dict, Tuple, Any, overload
+except ModuleNotFoundError:
+    print("please run command on the terminal: pip install -r requirements.txt")
+
 class DataBase: 
 
     """DataBase — lightweight SQLite helper for users and files.
@@ -16,8 +20,8 @@ class DataBase:
         Retrieve user information by user ID. Returns None if user not found.
     Insert(user: Dict[str,Any]) -> Dict
         Insert a new user. Returns dict with status and response message.
-    run_query(q: str, args: Dict[str,Any] = None) -> list[Any] | None
-        Execute an SQL query with optional parameters and return results.
+    run_query(q: str,args: Tuple[str,Ant]) -> Dict
+        Run an sql query with given arguments. Returns result status and cursor.
 
     Notes
     -----
@@ -30,8 +34,8 @@ class DataBase:
 
     def __init__(self, path: str):
             self.path: str = path
-            with sqlite3.connect(path) as conn:
             # create tables if not exist
+            with sqlite3.connect(self.path) as conn:
                 cur = conn.executescript(
                     """
                     CREATE TABLE IF NOT EXISTS users(
@@ -43,7 +47,6 @@ class DataBase:
                         tries INT DEFAULT 0,
                         disabled BOOLEAN DEFAULT 0
                     );
-
                     CREATE TABLE IF NOT EXISTS files(
                     file_id CHAR(255) PRIMARY KEY,
                     filename CHAR(255),
@@ -55,7 +58,6 @@ class DataBase:
                     """
                 )
 
-    #         return False
     def username_exists(self, username: str) -> bool:
         with sqlite3.connect(self.path) as conn:
             cursor = conn.cursor()
@@ -79,31 +81,34 @@ class DataBase:
         """
         
         try:
+            result: Dict[str,Any] | None = None
             with sqlite3.connect(self.path) as conn:
-                cur = conn.cursor()
-                result: Dict[str,Any] | None = None
+                cur: sqlite3.Cursor = conn.cursor()
                 if isinstance(login, int): # if we got the user id then run a query based on the user id
-                    result = cur.execute("SELECT * FROM users WHERE user_id = ?;",(login,)).fetchone()
+                    result = cur.execute("SELECT * FROM users WHERE user_id = ? and disabled = 0;",(login,)).fetchone()
                     print(len(result))
                 if isinstance(login, Dict):
-                    result = cur.execute("SELECT * FROM users WHERE username = :username ",login).fetchone()
-                write_to_log(f"[getUser()] {result}")
-                if result is None:
-                    print("?")
-                    return None
-                if isinstance(login,Dict) and not bcrypt.checkpw(login["password"].encode(), result[2].encode()):
-                    return None
-                else:
-                    response= {
-                            "user_id": result[0],
-                            "username": result[1],
-                            "password_hash": result[2],
-                            "max_storage": result[3],
-                            "curr_storage": result[4],
-                            "tries": result[5],
-                            "disabled": result[6],
-                    }
-                    return response
+                    result = cur.execute("SELECT * FROM users WHERE username = :username and disabled = 0",login).fetchone()
+            write_to_log(f"[getUser()] {result}")
+            if result is None:
+                return None
+            if isinstance(login,Dict) and not bcrypt.checkpw(login["password"].encode(), result[2].encode()): # check if the hash of their password is the same:
+                write_to_log(f"{result[5]=}, {result[0]=}")
+                if result[5] == 3: # if someone tried 3 times to enter the correct password then disable this user:
+                    self.run_query("UPDATE users set disabled = 1 WHERE user_id = ?",(result[0],))
+                else: # if The username is but the password isn't:
+                    self.run_query("UPDATE users SET tries = ? WHERE user_id = ?",(result[5]+1,result[0]))
+            else:
+                response= {
+                        "user_id": result[0],
+                        "username": result[1],
+                        "password_hash": result[2],
+                        "max_storage": result[3],
+                        "curr_storage": result[4],
+                        "tries": result[5],
+                        "disabled": result[6],
+                }
+                return response
         except Exception as e:
                 write_to_log(f"[protocol -> DataBase] Exception in getUser(): {e}")
                 return None
@@ -136,34 +141,26 @@ class DataBase:
                 "status": False,
                 "message": f"{e}"
             }
+    def run_query(self,q: str,args:Tuple[Any] | None = None) -> Tuple[bool, sqlite3.Cursor]:
+        """Running custom SQL Query with parameters to prevent SQL Injection
 
-    def run_query(self, q: str, args:Dict[str,Any] = None) -> list[Any] | None:
-        """
-        Execute a SQL query against the SQLite database referenced by self.path.
         Args:
-            q (str): SQL statement to execute. Can be a SELECT (returns rows) or a modification statement (INSERT/UPDATE/DELETE).
-            args (Dict[str, Any], optional): Parameters to bind to the query. For named placeholders use a dict (e.g. {"id": value}); for positional placeholders use a sequence. Defaults to None.
+            q (str): SQL Query
+            args (Tuple[Any] | None, optional): SQL Arguments. Defaults to None.
+
         Returns:
-            list[tuple] | None: For queries that return rows (e.g., SELECT) returns a list of rows (each row typically a tuple). For non-query statements that modify the database, returns None after committing the transaction.
-        Raises:
-            sqlite3.Error: If a database error occurs during execution.
+            Tuple[bool, sqlite3.Cursor]: a tuple contains the result status and cursor to fetch data.
         """
-        with sqlite3.connect(self.path) as conn:
-            if args:
-                curs = conn.execute(q,args)
-            else:
-                conn.execute(q)
-            curs.execute()
-            conn.commit()
-        """Return files for the user."""
         try:
             with sqlite3.connect(self.path) as conn:
                 cur = conn.cursor()
-                files = cur.execute("SELECT * FROM FILES WHERE user_id =:id",{"id":args}).fetchall()
+                if args:
+                    return True, cur.execute(q,args)
+                else:
+                    return True, cur.execute(q)
 
-                return files
         except Exception as e:
-            # Log the exception that occurred in retrieveFiles() including the exception message
-            write_to_log(f"[protocol -> DataBase] Exception on retrieveFiles(): {e}")  # write to log and print the error
+            return False, None
+
 
 db: DataBase = DataBase("./Database.db")

@@ -1,8 +1,12 @@
-import customtkinter as CTk
-from tkinter import ttk
-from CServerBL import CServerBL
-import threading
-from protocol import *
+try:
+    import customtkinter as CTk
+    from tkinter import ttk
+    from CServerBL import CServerBL
+    import threading
+    from protocol import *
+except ModuleNotFoundError:
+    print("please run command on the terminal: pip install -r requirements.txt")
+
 class CServerGUI(CServerBL):
     def __init__(self) -> None:
         super().__init__()

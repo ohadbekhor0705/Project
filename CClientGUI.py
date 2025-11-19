@@ -1,13 +1,17 @@
-import customtkinter as Ctk
-from tkinter import ttk
-from tkinter import filedialog as fd
-from CClientBL import CClientBL
-import threading
-import json
-import os
-from time import sleep
-import bcrypt
-from protocol import write_to_log
+try:
+    import customtkinter as Ctk
+    from tkinter import ttk
+    from tkinter import filedialog as fd
+    from CClientBL import CClientBL
+    import threading
+    import json
+    import os
+    from time import sleep
+    import bcrypt
+    import struct
+    from protocol import write_to_log
+except ModuleNotFoundError:
+    print("please run command on the terminal: pip install -r requirements.txt")
 class CClientGUI(CClientBL):
     
     def __init__(self) -> None:
@@ -154,8 +158,8 @@ class CClientGUI(CClientBL):
         self._loginButton.configure(state=Ctk.DISABLED)
         self._registerButton.configure(state=Ctk.DISABLED)
         # We call it from the background thread started by the button command above.
-        response , self.client_socket = self.connect(username,password,"login")
-        if self.client_socket:
+        response , self.client = self.connect(username,password,"login")
+        if self.client:
             # Create Storage Frame:
             self.LoginFrame.forget()
             self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
@@ -177,9 +181,9 @@ class CClientGUI(CClientBL):
         self._loginButton.configure(state=Ctk.DISABLED)
         self._registerButton.configure(state=Ctk.DISABLED)
         # We call it from the background thread started by the button command above.
-        response , self.client_socket = self.connect(username,password,"register")
-        if self.client_socket:
-            write_to_log(self.client_socket)
+        response , self.client = self.connect(username,password,"register")
+        if self.client:
+            write_to_log(self.client)
             # Create Storage Frame and adding to tab view:
             self.LoginFrame.forget()
             self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
@@ -191,19 +195,19 @@ class CClientGUI(CClientBL):
         self._messageBox.configure(text=response)
         self._title.configure(text=response)
         
-    def on_click_Upload(self):
-        
+    async def on_click_Upload(self):
         filename = fd.askopenfilename(
         title="Open a file",
         filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
-        )   
-        with open(filename,"rb") as f:
-            self._filestbl.insert("","end",
-                    values=(
-                    f.name.split("/")[-1] ,
-                    int(os.path.getsize(filename)/ (1024 * 1024)),
-                    "")
-                                )   
+        )
+        if filename:
+            with open(filename ,"rb") as f:
+                
+                sent = self.sendfile(f, "Upload")
+                if sent:
+                    self._filestbl.insert("","end",(f.name.split("/")[-1] ,int(os.path.getsize(filename)/ (1024 * 1024)),""))
+        else:
+            self._title.configure(text="File not found! Please select a file again.") 
     
     def remember_action(self, action: str, **user_data)  -> None:
        
@@ -244,7 +248,7 @@ class CClientGUI(CClientBL):
             try:
                 # Send a test message to server
                 write_to_log("Checking Server connection....")
-                self.client_socket.send(b"ping")
+                self.client.send(b"ping")
                 sleep(5)  # Check every 5 seconds
             except (ConnectionAbortedError):
                 

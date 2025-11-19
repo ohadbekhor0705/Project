@@ -1,12 +1,18 @@
-import socket  # Import socket for networking
-import threading  # Import threading for concurrent connections
-import json  # Import json for message serialization
-import os  # Import os for file system operations
-from tkinter.ttk import Treeview  # Import Treeview for GUI client table
-from typing import Callable, List, Tuple, Dict  # Type hints
-from protocol import *  # Import protocol definitions
-import bcrypt  # Import bcrypt for password hashing
-from Database import db # Import db for Database operations
+
+
+try:
+    from typing import Any, Dict
+    import socket  # Import socket for networking
+    import threading  # Import threading for concurrent connections
+    import json  # Import json for message serialization
+    import os  # Import os for file system operations
+    from tkinter.ttk import Treeview  # Import Treeview for GUI client table
+    from typing import Callable, List, Tuple, Dict  # Type hints
+    from protocol import *  # Import protocol definitions
+    import bcrypt  # Import bcrypt for password hashing
+    from Database import db # Import db for Database operations
+except ModuleNotFoundError:
+    print("please run command on the terminal: pip install -r requirements.txt") 
 class CServerBL():
     def __init__(self) -> None:
         self._ip: str = "0.0.0.0"  # Server IP address
@@ -45,17 +51,19 @@ class CServerBL():
                 }
                 # Handle login command
                 write_to_log(type(user_data))
-                if user_data["cmd"] == "login" and (_user := db.getUser(user_data)) and _user["tries"] < 4:
-                    self.createHandler(client, address, self.table_callback, _user)  # Create handler thread
-                    response = {"status": True, "message": f"Welcome back, {user_data['username']}", "user": "_user"}
-                    print(response)
+                if user_data["cmd"] == "login":
+                    if (_user := db.getUser(user_data)):
+                        self.createHandler(client, address, self.table_callback, _user)  # Create handler thread
+                        db.run_query("UPDATE users SET tries = 0 WHERE user_id = ?",(_user["user_id"],))
+                        response = {"status": True, "message": f"Welcome back, {user_data['username']}", "user": "_user"}
+                    else:
+                        response = {"status": False, "message": "Username or password are Invalid!"}
                 # Handle register command
                 elif user_data["cmd"] == "register":
                     user_data["password"] = bcrypt.hashpw(user_data["password"].encode("utf-8"),bcrypt.gensalt())
                     response = db.Insert(user_data)
                     if response["status"] == True:
-                        user = db.getUser(user_data)
-                        response["user"] = "user"
+                        user: Dict[str, Any] | None = db.getUser(user_data)
                         self.createHandler(client,address,self.table_callback,user)
                 # Send response to client
                 client.send(json.dumps(response).encode())
@@ -68,7 +76,6 @@ class CServerBL():
         client_handler: CClientHandler = CClientHandler(client_socket, client_address, table_callback, user)  # Create handler
         self.clientHandlers.append(client_handler)  # Add to handler list
         client_handler.start()  # Start handler thread
-    
     def stop_server(self) -> None:
         write_to_log(f"[ServerBL] stop_server() called")  # Log stop
         try:
@@ -93,6 +100,8 @@ class CServerBL():
             write_to_log(f"[ServerBL] Exception at stop_server(): {e}")  # Log exceptions
     
     def table_callback(self, c_socket: socket.socket, addr, action: str) -> None:
+        if not self.clients_table:
+            return
         if action == "add":
             self.clients_table.insert("", "end", values=(socket.gethostbyaddr(addr[0])[0], addr[0], "None"))  # Add client to table
     
@@ -129,13 +138,16 @@ class CClientHandler(threading.Thread):
         self.connected = False
         self.table_callback: Callable[[socket.socket, Tuple[str, int], str], str]= table_callback
         self.user: Dict[str: Any] = user
+        self.daemon = True
     # This code run for every client in a different thread
     def run(self) -> None:
         self.table_callback(self.client,self.address,'add')
         # Server functionality here
-        while self.connected:
+        import time
+        while self.connected or self.client is not None:
             try:
-                write_to_log("connected")
+                time.sleep(3)
+                print("connected")
             except Exception as e:
                 write_to_log(f"[CServerBL] -> [ClientHandler] Exception at run(): {e}")
         self.disconnect()
