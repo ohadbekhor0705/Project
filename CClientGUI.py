@@ -9,7 +9,6 @@ try:
     from time import sleep
     import bcrypt
     import struct
-    from protocol import write_to_log
 except ModuleNotFoundError:
     print("please run command on the terminal: pip install -r requirements.txt")
 class CClientGUI(CClientBL):
@@ -183,7 +182,6 @@ class CClientGUI(CClientBL):
         # We call it from the background thread started by the button command above.
         response , self.client = self.connect(username,password,"register")
         if self.client:
-            write_to_log(self.client)
             # Create Storage Frame and adding to tab view:
             self.LoginFrame.forget()
             self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
@@ -195,7 +193,7 @@ class CClientGUI(CClientBL):
         self._messageBox.configure(text=response)
         self._title.configure(text=response)
         
-    async def on_click_Upload(self):
+    def on_click_Upload(self):
         filename = fd.askopenfilename(
         title="Open a file",
         filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
@@ -241,13 +239,13 @@ class CClientGUI(CClientBL):
                         self._checkBox.select()
 
         except Exception as e:
-            write_to_log(e)
+            print(e)
 
     def check_connection(self):
         while True:
             try:
                 # Send a test message to server
-                write_to_log("Checking Server connection....")
+                print("Checking Server connection....")
                 self.client.send(b"ping")
                 sleep(5)  # Check every 5 seconds
             except (ConnectionAbortedError):
@@ -262,7 +260,7 @@ class CClientGUI(CClientBL):
 
 if __name__ == "__main__":
     try:
-        write_to_log("Press Ctrl + C to exit.")
+        print("Press Ctrl + C to exit.")
         App = CClientGUI()
         App.run()
     except KeyboardInterrupt: # Ctrl + C

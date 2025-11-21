@@ -2,3 +2,5 @@ customtkinter
 cryptography
 uuid
 bcrypt
+SQLAlchemy
+pydantic
