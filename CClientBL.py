@@ -2,7 +2,6 @@
 import socket
 from typing import Tuple,BinaryIO
 import json
-from protocol import *
 import struct
 import os
 class CClientBL():
@@ -35,47 +34,53 @@ class CClientBL():
         try:
             _client_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
             _client_socket.connect(self.ADDR) 
-            self.user = {
+            self.user: dict[str, str] = {
                     "username": username,
                     "password": password,
                     "cmd": cmd
             }
+            print(self.user)
             _client_socket.send(json.dumps(self.user).encode())
             response = json.loads(_client_socket.recv(1024).decode())
-            write_to_log(response is None)
+            print(response)
             if response["status"] == True:
-                write_to_log("connected!")
-                write_to_log(f"[CLIENT_BL] {_client_socket.getsockname()} connected")
-                write_to_log(response["message"])
+                self.connected = True
+                print("connected!")
+                print(f"[CLIENT_BL] {_client_socket.getsockname()} connected")
+                print(response["message"])
                 print(f"{response["message"]=}")
                 return f"{response["message"]}", _client_socket
             else:
                 self.user = {}
                 return response["message"], None
         except Exception as e:
-            write_to_log("[CLIENT_BL] Exception on connect: {}".format(e))
+            print("[CLIENT_BL] Exception on connect: {}".format(e))
             return "Could'nt connect to server!",None
     
-    def sendfile(self,file: BinaryIO, command: str) -> bool:        
-        payload: str = json.dumps({
-            "cmd": command,
-            "filename":  file.name.split("/"),
-            "filesize": os.path.getsize(file.name)
-        })
-        self.client.send(struct.pack("!Q",len(payload)))
-        self.client.send(payload.encode("utf-8"))
-        while chunk:= file.read(4096):
-            self.client.sendall(chunk)
-        return True
+    def sendfile(self,file: BinaryIO, command: str) -> bool:
+        try:        
+            payload: str = json.dumps({
+                "cmd": command,
+                "filename":  file.name.split("/")[0],
+                "filesize": os.path.getsize(file.name)
+            })
+            print(f"{struct.pack('!Q',len(payload))}")
+            self.client.send(struct.pack("!Q",len(payload)))
+            self.client.send(payload.encode("utf-8"))
+            while chunk:= file.read(4096):
+                self.client.sendall(chunk)
+            return True
+        except Exception as e:
+            return False
 
     def disconnect(self) -> None:
-        try:
-            self.connected = False
+        self.connected = False
+        if self.client:
             self.client.close()
-            self.client = None
-        except Exception as e:
-            write_to_log(f"[ClientBL] error on disconnect() {e}")
+        self.client = None
 if __name__ == "__main__":
-    client = CClientBL()
-    write_to_log(client.connect("test123","fhfhjfgh","login"))
-     
+    client: CClientBL | None = CClientBL()
+    msg, client.client = client.connect("admin2","admin","register")
+    print(msg)
+    while client.connected:
+        client.client.send(input("enter message to send to  server: \n").encode())

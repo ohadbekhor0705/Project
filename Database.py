@@ -86,14 +86,12 @@ class DataBase:
                 cur: sqlite3.Cursor = conn.cursor()
                 if isinstance(login, int): # if we got the user id then run a query based on the user id
                     result = cur.execute("SELECT * FROM users WHERE user_id = ? and disabled = 0;",(login,)).fetchone()
-                    print(len(result))
                 if isinstance(login, Dict):
                     result = cur.execute("SELECT * FROM users WHERE username = :username and disabled = 0",login).fetchone()
             write_to_log(f"[getUser()] {result}")
             if result is None:
                 return None
             if isinstance(login,Dict) and not bcrypt.checkpw(login["password"].encode(), result[2].encode()): # check if the hash of their password is the same:
-                write_to_log(f"{result[5]=}, {result[0]=}")
                 if result[5] == 3: # if someone tried 3 times to enter the correct password then disable this user:
                     self.run_query("UPDATE users set disabled = 1 WHERE user_id = ?",(result[0],))
                 else: # if The username is but the password isn't:
@@ -162,5 +160,17 @@ class DataBase:
         except Exception as e:
             return False, None
 
+    def retrieve_file(self, file_id: str) -> Tuple[Dict[str, Any],bytes] | None:
+        ok, cur = self.run_query("SELECT 1 FROM files WHERE file_id = ?",(file_id,))
+        if ok:
+            result = cur.fetchone()[0]
+            return True, {
+                "file_id": result[0],
+                "filename": result[1],
+                "filesize": result[2],
+                "modified": result[3],
+                "user_id": result[4]
+            }
+        return None
 
 db: DataBase = DataBase("./Database.db")
