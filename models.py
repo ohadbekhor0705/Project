@@ -7,7 +7,7 @@ try:
     from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session
     from pydantic import BaseModel
 except ModuleNotFoundError:
-    print("please run command on the terminal: pip install -r requirements.txt")
+    raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
 
 
 
@@ -105,7 +105,7 @@ class UserCreate(BaseModel):
 
 # SQLite engine (thread-safe)
 engine = create_engine(
-    "sqlite:///mydb.db", echo=True, connect_args={"check_same_thread": False}
+    "sqlite:///mydb.db", echo=False, connect_args={"check_same_thread": False}
 )
 Base.metadata.create_all(engine)
 

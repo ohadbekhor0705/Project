@@ -4,6 +4,8 @@ from typing import Tuple,BinaryIO
 import json
 import struct
 import os
+from customtkinter import CTkProgressBar
+from tkinter.ttk import Treeview
 class CClientBL():
     def __init__(self) -> None:
         self.ADDR = ("127.0.0.1", 9999)
@@ -57,21 +59,31 @@ class CClientBL():
             print("[CLIENT_BL] Exception on connect: {}".format(e))
             return "Could'nt connect to server!",None
     
-    def sendfile(self,file: BinaryIO, command: str) -> bool:
-        try:        
+    def sendfile(self,file: BinaryIO, command: str, prog_barRef:CTkProgressBar = None,files_table: Treeview = None) -> None:
+        try:    
+            file_size = os.path.getsize(file.name)    
             payload: str = json.dumps({
                 "cmd": command,
-                "filename":  file.name.split("/")[0],
-                "filesize": os.path.getsize(file.name)
+                "filename":  file.name.split("/")[-1],
+                "filesize": file_size
             })
-            print(f"{struct.pack('!Q',len(payload))}")
-            self.client.send(struct.pack("!Q",len(payload)))
-            self.client.send(payload.encode("utf-8"))
-            while chunk:= file.read(4096):
-                self.client.sendall(chunk)
-            return True
+            # print(payload)
+            # print(f"{struct.pack('!Q',len(payload))}")
+            sent: int = 0
+            #prog_barRef.set(0)
+            self.client.send(struct.pack("!Q",len(payload))) # send payload length
+            self.client.send(payload.encode("utf-8")) # send payload
+            ran = False
+            while chunk:= file.read(4096): # read file in chunks
+                #print(chunk is None)
+                #print("sending:",chunk)
+                if chunk:
+                    self.client.sendall(chunk) # send chunks
+                #sent += len(chunk)
+                #prog_barRef.set(sent * 100 / file_size) # update progress bar
+            files_table.insert("","end",(file.name.split("/")[-1] ,int(os.path.getsize(payload["filename"])/ (1024 * 1024)),""))
         except Exception as e:
-            return False
+            return
 
     def disconnect(self) -> None:
         self.connected = False
@@ -80,7 +92,11 @@ class CClientBL():
         self.client = None
 if __name__ == "__main__":
     client: CClientBL | None = CClientBL()
-    msg, client.client = client.connect("admin2","admin","register")
+    msg, client.client = client.connect("Ogadichka4","Ogadich","login")
     print(msg)
-    while client.connected:
-        client.client.send(input("enter message to send to  server: \n").encode())
+    with open("./Thomas_Calculus.pdf","rb") as f:
+        client.sendfile(f,"upload")
+    response_length: int = struct.unpack("!Q",client.client.recv(8))[0]
+    response = json.loads(client.client.recv(response_length).decode())
+    print(response)
+    

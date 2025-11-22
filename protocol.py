@@ -1,6 +1,13 @@
 
 
 
+from socket import socket
+from typing import Any
+
+
+from models import User
+
+
 try:
     from sqlalchemy.orm.session import Session
     from sqlalchemy import and_
@@ -10,6 +17,8 @@ try:
     import bcrypt
     import socket
     from models import User, File, SessionLocal
+    from datetime import datetime
+    from uuid6 import uuid7
 except ModuleNotFoundError:
     raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
 # prepare Log file
@@ -20,14 +29,11 @@ def write_to_log(msg) -> None:
     #logging.info(msg)
     print(msg)
 
-
 @overload
 def getUser(login: int) -> User | None: ...
 
 @overload
 def getUser(login: Dict[str,Any]) -> User | None: ...
-
-
 
 def username_exists(username: str, db: Session | None = None) -> bool: 
     if db is None:
@@ -59,11 +65,13 @@ def getUser(login: dict | int) -> 'User | None':
             user = db.query(User).filter(
                 and_(User.username == login["username"], User.disabled == False)
             ).first()
-        print(user)
+        
 
+        if not user:
+            return  None
         # Handle login password
-        if user is not None and isinstance(login, dict):
-            password_correct = bcrypt.checkpw(
+        if isinstance(login, dict):
+            password_correct: bool = bcrypt.checkpw(
                 login["password"].encode(), user.password_hash.encode()
             )
             if not password_correct:
@@ -71,7 +79,6 @@ def getUser(login: dict | int) -> 'User | None':
                 if user.tries >= 3:
                     user.disabled = True
                 db.commit()  # commit changes while session is active
-
         # create a new User object that is NOT bound to the session
         detached_user = User(
             user_id=user.user_id,
@@ -82,10 +89,9 @@ def getUser(login: dict | int) -> 'User | None':
             max_storage=user.max_storage,
             curr_storage=user.curr_storage
         )
-        return detached_user  # safe to use anywhere   
-        
+        return detached_user  # safe to use anywhere           
     
-def Insert(user: Dict[str,Any]) -> Dict:
+def InsertUser(user: Dict[str,Any]) -> Dict:
     """Insert a new user into the database.
 
     Args:
@@ -111,6 +117,58 @@ def Insert(user: Dict[str,Any]) -> Dict:
         return {
           "status": False,
           "message": f"{e}"
-          }
+        }
     finally:
-        db.close()      
+        db.close()
+
+
+def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dict[str,Any]:
+    """Uploading a file
+
+    Args:
+        payload (dict[str, Any]): Containing 
+        client (socket.socket): client socket object
+        user (User): client user information
+
+    Returns:
+        dict[str,Any]: status response from server to client
+    """    
+
+
+    file_size: int = payload["filesize"]
+    if user.curr_storage + file_size > user.max_storage:
+        return {"status": False, "message": "You dont have enough storage!"}
+    received: int = 0
+    file_id: str = str(uuid7())
+    with open(f"./StorageFiles/{file_id}","ab") as f:
+        while received < file_size:
+            chunk: bytes = client.recv(4096)
+            if not chunk:
+                break
+            f.write(chunk)
+            received += len(chunk)
+        
+    with SessionLocal() as db:
+        new_file = File(
+            file_id=file_id,
+            filename=payload["filename"],
+            filesize=payload["filesize"],
+            modified=int(datetime.now().now().timestamp()),
+            user_id=user.user_id
+        )
+        user.curr_storage += new_file.filesize
+        db.add(new_file)
+        db.merge(user)
+        db.commit()
+    return {"status": True, "message": "File Uploaded"}
+
+
+def handle_client_request(payload: dict[str, Any], client: socket.socket, user: User) -> dict[str, Any]:
+    response: dict[str, Any] = {}
+    params: tuple[dict[str, Any], socket.socket, User] = (payload, client, user)
+    match payload["cmd"]:
+        case "upload":
+            response = UploadFile(*params)
+        case _:
+            response = {"status": False, "message": "Invalid command"}
+    return response

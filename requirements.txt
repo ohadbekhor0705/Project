@@ -4,3 +4,5 @@ uuid
 bcrypt
 SQLAlchemy
 pydantic
+gzip
+uuid6

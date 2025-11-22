@@ -56,7 +56,6 @@ class CServerBL():
                 # Handle login command
                 if payload["cmd"] == "login":
                     if (_user  := getUser(payload)):
-                        print(_user.password_hash)
                         self.createHandler(client, address,_user)  # Create handler thread
                         response = {"status": True, "message": f"Welcome back, {payload['username']}", "user": "_user"}
                     else:
@@ -65,10 +64,9 @@ class CServerBL():
                 # Handle register command
                 elif payload["cmd"] == "register":
                     payload["password_hash"] = bcrypt.hashpw(payload["password"].encode("utf-8"),bcrypt.gensalt()).decode()
-                    response = Insert(payload)
+                    response = InsertUser(payload)
                     if response["status"] == True:
                         user: User | None = getUser(payload)
-                        print(user)
                         self.createHandler(client,address,user)
                 # Send response to client
                 client.send(json.dumps(response).encode())
@@ -89,7 +87,7 @@ class CServerBL():
                         clientHandler.disconnect()  # Disconnect client
                         clientHandler.join()  # Wait for thread to finish
                 self.clientHandlers = []  # Clear handler list
-                self.clients_table.delete(*self.clients_table.get_children())  # Clear GUI table
+                #self.clients_table.delete(*self.clients_table.get_children())  # Clear GUI table
             
             if self.server_socket is not None:
                 self.server_socket.close()  # Close server socket
@@ -105,11 +103,6 @@ class CServerBL():
         self.clientHandlers.append(client_handler)  # Add to handler list
         client_handler.start()  # Start handler thread
     
-    def table_callback(self, c_socket: socket.socket, addr, action: str) -> None:
-        if not self.clients_table:
-            return
-        if action == "add":
-            self.clients_table.insert("", "end", values=(socket.gethostbyaddr(addr[0])[0], addr[0], "None"))  # Add client to table
     def __repr__ (self) -> str:
         return f"<Server(ip={self._ip}, port={self._port}, flag={self.event.is_set()}, {self.server_socket})>"
 
@@ -146,20 +139,30 @@ class CClientHandler(threading.Thread):
         # Server functionality here
         while self.connected and self.client is not None:
             try:
-                pass
+                if self.client.recv(4, socket.MSG_PEEK) == b"!DIS":
+                    break
+                message_len: int = struct.unpack("!Q",self.client.recv(8))[0]
+                payload: dict[str, Any] = json.loads(self.client.recv(message_len).decode())
+                write_to_log(f"[ServerBL] {payload=}")
+                response = handle_client_request(payload,self.client,self.user) # Handle client request
+                response_bytes = json.dumps(response).encode()
+                self.client.send(struct.pack("!Q",len(response_bytes)))
+                self.client.send(response_bytes)
             except ConnectionResetError:
                 print("client was forced closed!")
-                self.disconnect()
-            except Exception as e:
-                write_to_log(f"[CServerBL] -> [ClientHandler] Exception at run(): {e}")
+                #write_to_log(f"[CServerBL] -> [ClientHandler] Exception at run(): {e}")
+            finally:
                 self.disconnect()
     def disconnect(self) -> None:
+        print(f"[SERVER-BL] {self} disconnected")
         self.connected = False
         if self.client:
             self.client.close()
         self.client = None
+        self = None
+        
     def __repr__(self) -> str:
-        return f"<ClientHandler({self.address=}, {self.client=})>"
+        return f"<ClientHandler({self.address=}, \n{self.client=})>"
 if __name__ == "__main__":
     try:
         write_to_log("Press Ctrl + C to exit.")

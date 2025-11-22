@@ -13,7 +13,7 @@ except ModuleNotFoundError:
     print("please run command on the terminal: pip install -r requirements.txt")
 class CClientGUI(CClientBL):
     
-    def __init__(self) -> None:
+    def __init__(self) -> None:  # Метод __init__ для инициализации
         super().__init__()
         # Load a custom color theme file for customtkinter. This points to the bundled theme JSON.
         # If the path is wrong the library will fall back to defaults, so keep the file with the project.
@@ -34,7 +34,7 @@ class CClientGUI(CClientBL):
         self._filestbl = None
         self._searchbar = None
         self._search_button = None  
-
+        self.progBar = None
         self._title = None  
 
         self.StorageFrame: Ctk.CTkFrame = None
@@ -63,7 +63,13 @@ class CClientGUI(CClientBL):
         StorageFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.master)
 
         self._title = Ctk.CTkLabel(StorageFrame, text="Hi, {username}", anchor="center",font=self.FONT)
-        self._title.place(relx=0.5, rely=0.04, anchor="center") 
+        self._title.place(relx=0.5, rely=0.04, anchor="center")
+
+        self.progBar = Ctk.CTkProgressBar(StorageFrame,corner_radius=20,border_width=2,orientation="horizontal",
+                                          border_color="#4935fa",fg_color="#6E8BA4",progress_color="#22559b",mode="determinate",
+                                          determinate_speed=5,indeterminate_speed=.5)
+        self.progBar.place(relx = 0.1, rely=0.19, relheight=0.019, relwidth=0.65)
+        self.progBar.set(0.6)
 
         self._searchbar = Ctk.CTkEntry(StorageFrame, placeholder_text= "Search for files...", font = self.FONT)
         self._searchbar.place(relx = 0.1, rely=0.1, relheight=0.06, relwidth=0.65)
@@ -82,7 +88,7 @@ class CClientGUI(CClientBL):
 
         style = ttk.Style() 
         style.theme_use("default")
-        # https://github.com/TomSchimansky/CustomTkinter/discussions/431
+        # code from: https://github.com/TomSchimansky/CustomTkinter/discussions/431
         style.configure("Treeview",
                             background="#2a2d2e",
                             foreground="white",
@@ -199,11 +205,10 @@ class CClientGUI(CClientBL):
         filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
         )
         if filename:
+            self.progBar.set(0)
             with open(filename ,"rb") as f:
-                
-                sent = self.sendfile(f, "Upload")
-                if sent:
-                    self._filestbl.insert("","end",(f.name.split("/")[-1] ,int(os.path.getsize(filename)/ (1024 * 1024)),""))
+                send_thread = threading.Thread(target=self.sendfile, args=(f,"upload",self.progBar,self._filestbl))
+                send_thread.start()
         else:
             self._title.configure(text="File not found! Please select a file again.") 
     
