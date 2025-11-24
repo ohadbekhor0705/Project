@@ -47,8 +47,12 @@ class CServerBL():
             while self.event.is_set() and self.server_socket is not None:  # Main accept loop
                 client, address = self.server_socket.accept()  # Accept new client
                 write_to_log(client)
-                payload: Dict[str,Any] = json.loads(client.recv(1024).decode())  # Receive initial message
+                # getting payload from client
+                payload_length_bytes: bytes = client.recv(8) 
+                payload_bytes: bytes = client.recv(struct.unpack("!Q",payload_length_bytes)[0])
+                payload: dict = json.loads(payload_bytes.decode())
                 print(payload)
+            
                 response = {
                     "status": False,
                     "message": "<authentication Response from server>"
@@ -57,7 +61,7 @@ class CServerBL():
                 if payload["cmd"] == "login":
                     if (_user  := getUser(payload)):
                         self.createHandler(client, address,_user)  # Create handler thread
-                        response = {"status": True, "message": f"Welcome back, {payload['username']}", "user": "_user"}
+                        response = {"status": True, "message": f"Welcome back, {payload['username']}", "user": _user.toDict()}
                     else:
                         response = {"status": False, "message": "Username or password are Invalid!"}
 
@@ -67,9 +71,13 @@ class CServerBL():
                     response = InsertUser(payload)
                     if response["status"] == True:
                         user: User | None = getUser(payload)
+                        response["user"] = user.toDict()
                         self.createHandler(client,address,user)
                 # Send response to client
-                client.send(json.dumps(response).encode())
+                
+                client.send(
+                    struct.pack("!Q",len(json.dumps(response).encode())) + json.dumps(response).encode()
+                )
         except OSError as e:
             pass  # Ignore OS errors
         #except Exception as e:
@@ -141,18 +149,19 @@ class CClientHandler(threading.Thread):
             try:
                 if self.client.recv(4, socket.MSG_PEEK) == b"!DIS":
                     break
-                message_len: int = struct.unpack("!Q",self.client.recv(8))[0]
+                message_len_bytes: bytes = self.client.recv(8)
+                message_len: int = struct.unpack("!Q",message_len_bytes)[0]
+                
                 payload: dict[str, Any] = json.loads(self.client.recv(message_len).decode())
                 write_to_log(f"[ServerBL] {payload=}")
                 response = handle_client_request(payload,self.client,self.user) # Handle client request
-                response_bytes = json.dumps(response).encode()
-                self.client.send(struct.pack("!Q",len(response_bytes)))
-                self.client.send(response_bytes)
+                
+                response_bytes: bytes = json.dumps(response).encode()
+                self.client.send(struct.pack("!Q",len(response_bytes)) + response_bytes)
             except ConnectionResetError:
                 print("client was forced closed!")
                 #write_to_log(f"[CServerBL] -> [ClientHandler] Exception at run(): {e}")
-            finally:
-                self.disconnect()
+
     def disconnect(self) -> None:
         print(f"[SERVER-BL] {self} disconnected")
         self.connected = False

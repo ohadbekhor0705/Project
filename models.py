@@ -45,6 +45,14 @@ class User(Base):
 
     def __repr__(self):
         return f"<User id={self.user_id} username='{self.username}'>"
+    def toDict(self):
+        return {
+            "user_id": self.user_id,
+            "username": self.username,
+            "max_storage": self.max_storage,
+            "curr_storage": self.curr_storage,
+            "tries":self.tries
+        }
 
 
 class File(Base):

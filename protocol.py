@@ -140,7 +140,7 @@ def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dic
         return {"status": False, "message": "You dont have enough storage!"}
     received: int = 0
     file_id: str = str(uuid7())
-    with open(f"./StorageFiles/{file_id}","ab") as f:
+    with open(f"./StorageFiles/{file_id}.bin","ab") as f:
         while received < file_size:
             chunk: bytes = client.recv(4096)
             if not chunk:

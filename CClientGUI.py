@@ -48,6 +48,14 @@ class CClientGUI(CClientBL):
     
 
     def create_ui(self) -> None:
+        """Assembling UI elements
+        """        
+
+
+
+
+
+
         
         self.master.geometry(f"{self.width}x{self.height}")
         # Create Tabs
@@ -206,9 +214,9 @@ class CClientGUI(CClientBL):
         )
         if filename:
             self.progBar.set(0)
-            with open(filename ,"rb") as f:
-                send_thread = threading.Thread(target=self.sendfile, args=(f,"upload",self.progBar,self._filestbl))
-                send_thread.start()
+            f = open(filename,"rb")
+            send_thread = threading.Thread(target=self.sendfile, args=(f,"upload"))
+            send_thread.start()
         else:
             self._title.configure(text="File not found! Please select a file again.") 
     
