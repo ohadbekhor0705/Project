@@ -1,3 +1,9 @@
+from typing import Any
+
+from sqlalchemy.orm.relationships import _RelationshipDeclared
+from sqlalchemy.sql.schema import Column
+
+
 try:
     import sqlite3
     import bcrypt
@@ -30,21 +36,21 @@ class User(Base):
         disabled (bool): Whether the user is disabled.
         files (list[File]): Relationship to File objects.
     """
-    __tablename__ = "users"
+    __tablename__: str = "users"
 
-    user_id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String(255), nullable=False)
-    password_hash = Column(Text, nullable=False)
-    max_storage = Column(BigInteger, default=1073741824)
-    curr_storage = Column(BigInteger, default=0)
-    tries = Column(Integer, default=0)
-    disabled = Column(Boolean, default=False)
+    user_id: Column[int] = Column(Integer, primary_key=True, autoincrement=True)
+    username: Column[str] = Column(String(255), nullable=False)
+    password_hash: Column[str] = Column(Text, nullable=False)
+    max_storage: Column[int] = Column(BigInteger, default=1073741824)
+    curr_storage: Column[int] = Column(BigInteger, default=0)
+    tries: Column[int] = Column(Integer, default=0)
+    disabled: Column[bool] = Column(Boolean, default=False)
 
-    files = relationship("File", back_populates="user", cascade="all, delete-orphan")
+    files= relationship("File", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User id={self.user_id} username='{self.username}'>"
-    def toDict(self):
+    def toDict(self):# -> dict[str, Any]:
         return {
             "user_id": self.user_id,
             "username": self.username,
@@ -52,7 +58,6 @@ class User(Base):
             "curr_storage": self.curr_storage,
             "tries":self.tries
         }
-
 
 class File(Base):
     """
@@ -66,13 +71,13 @@ class File(Base):
         user_id (int): Foreign key linking to User.
         user (User): Relationship to owning User.
     """
-    __tablename__ = "files"
+    __tablename__: str = "files"
 
-    file_id = Column(String(255), primary_key=True)
-    filename = Column(String(255), nullable=False)
-    filesize = Column(Integer, nullable=False)
-    modified = Column(Integer, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
+    file_id: Column[str] = Column(String(255), primary_key=True)
+    filename: Column[str] = Column(String(255), nullable=False)
+    filesize: Column[int] = Column(Integer, nullable=False)
+    modified: Column[int] = Column(Integer, nullable=False)
+    user_id: Column[int] = Column(Integer, ForeignKey("users.user_id"))
 
     user = relationship("User", back_populates="files")
 

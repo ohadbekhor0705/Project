@@ -56,8 +56,6 @@ def getUser(login: dict | int) -> 'User | None':
             user = db.query(User).filter(
                 and_(User.username == login["username"], User.disabled == False)
             ).first()
-        
-
         if not user:
             return  None
         # Handle login password
@@ -83,9 +81,6 @@ def getUser(login: dict | int) -> 'User | None':
         return detached_user  # safe to use anywhere           
 
 
-def files_by_id(id: int) -> dict[str,Any]:
-    files_dict = {}
-    files: list[File] = getUser(id).files
     pass
 def InsertUser(user: Dict[str,Any]) -> Dict:
     """Insert a new user into the database.
@@ -115,6 +110,14 @@ def InsertUser(user: Dict[str,Any]) -> Dict:
         }
     finally:
         db.close()
+
+
+def files_by_id(uid: int) -> list[dict[str,Any]]:
+    with SessionLocal() as db:
+        files  = db.query(File).filter(File.user_id == uid).all()
+        if not files:
+            return []
+        return [ {"filename": f.filename, "filesize": f.filesize, "modified": f.modified} for f in files]
 
 def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dict[str,Any] | None:
     """Uploading a file
@@ -153,22 +156,25 @@ def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dic
         return None
         
     with SessionLocal() as db:
+        # attach user to the session
+        user_in_session = db.merge(user)
+
         new_file = File(
             file_id=file_id,
             filename=payload["filename"],
             filesize=payload["filesize"],
-            modified=int(datetime.now().now().timestamp()),
+            modified=int(datetime.now().timestamp()),
             user_id=user.user_id
         )
-        user.curr_storage += new_file.filesize
-        db.add(new_file)
-        db.merge(user)
+
+        user_in_session.curr_storage += new_file.filesize
+        user_in_session.files.append(new_file)
         db.commit()
     return {"status": True, "message": payload["filename"]+" Uploaded!"}
 
 
-def handle_client_request(payload: dict[str, Any], client: socket.socket, user: User) -> dict[str, Any]:
-    response: dict[str, Any] = {}
+def handle_client_request(payload: dict[str, Any], client: socket.socket, user: User) -> dict[str, Any] | None:
+    response: dict[str, Any]  | None= {}
     params: tuple[dict[str, Any], socket.socket, User] = (payload, client, user)
     match payload["cmd"]:
         case "upload":

@@ -1,3 +1,7 @@
+from datetime import datetime
+from typing import Literal
+
+
 try:
     import customtkinter as Ctk
     from tkinter import ttk
@@ -10,6 +14,7 @@ try:
     import bcrypt
     import struct
     from typing import List
+    import datetime
 except ModuleNotFoundError:
     print("please run command on the terminal: pip install -r requirements.txt")
 class CClientGUI(CClientBL):
@@ -23,23 +28,23 @@ class CClientGUI(CClientBL):
         self.master = Ctk.CTk()
         self.FONT: tuple[str, int] = ("Helvetica",24)
         # Login Frame widgets
-        self._usernameLabel = None
-        self._usernameEntry = None
-        self._passwordLabel = None
-        self._passwordEntry = None
+        self._usernameLabel: Ctk.CTkLabel | None = None
+        self._usernameEntry: Ctk.CTkEntry| None= None
+        self._passwordLabel: Ctk.CTkLabel| None= None
+        self._passwordEntry: Ctk.CTkEntry| None= None
         self._loginButton = None
         # Storage Frame widgets
-        self._savefile_button = None
-        self._deletefile_button = None
-        self._uploadfile_button = None
+        self._savefile_button: Ctk.CTkLabel | None = None
+        self._deletefile_button: Ctk.CTkButton | None = None
+        self._uploadfile_button: Ctk.CTkButton | None = None
         self.files_table = None
         self._searchbar = None
         self._search_button = None  
         self.progress_bar = None
         self.response_title = None  
 
-        self.StorageFrame: Ctk.CTkFrame = None
-        self.LoginFrame: Ctk.CTkFrame = None 
+        self.StorageFrame: Ctk.CTkFrame | None = None
+        self.LoginFrame: Ctk.CTkFrame | None= None 
         
         self.height, self.width = 750, 1300
         self.SAVE = "SAVE"
@@ -52,19 +57,13 @@ class CClientGUI(CClientBL):
         """Assembling UI elements
         """        
 
-
-
-
-
-
-        
         self.master.geometry(f"{self.width}x{self.height}")
         # Create Tabs
         self.master.resizable(False, False)
 
         self.LoginFrame = self.create_LoginFrame()
         self.LoginFrame.pack(fil="both", expand=True, padx=10, pady=10)
-        self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
+        self.StorageFrame = self.create_StorageFrame()
 
     def create_StorageFrame(self) -> Ctk.CTkFrame:
         # creating STORAGE UI widgets:
@@ -89,7 +88,7 @@ class CClientGUI(CClientBL):
         self._uploadfile_button = Ctk.CTkButton(StorageFrame, text= "Upload 📤", font = self.FONT, anchor="center", command=self.on_click_Upload)
         self._uploadfile_button.place(relx= 0.1, rely=0.22, relheight=0.06, relwidth=0.15) 
 
-        self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save 💾", font=self.FONT, anchor="center", state="disabled")
+        self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save 💾", font=self.FONT, anchor="center", state="disabled") # pyright: ignore[reportAttributeAccessIssue]
         self._savefile_button.place(relx= 0.35, rely=0.22, relheight=0.06, relwidth=0.15)  
 
         self._deletefile_button = Ctk.CTkButton(StorageFrame, text="Delete 🗑️", font=self.FONT, anchor="center", state="disabled")
@@ -109,14 +108,12 @@ class CClientGUI(CClientBL):
     
         style.configure("Treeview.Heading",background="#2a2d2e",foreground="white",relief="flat", font=self.FONT)
         style.map("Treeview.Heading",background=[('active', "#2a2d2e")])
-        columns = ("file name", "file size (MB)", "Date modified")
+        columns: tuple[Literal['file name'], Literal['file size (MB)'], Literal['Date modified']] = ("file name", "file size (MB)", "Date modified")
         self.files_table = ttk.Treeview(StorageFrame, columns=columns, show="headings")
         for col in columns:
             self.files_table.heading(col, text=col,anchor="center")
             self.files_table.column(col, width=int(0.87*self.width/len(columns)), anchor="center", stretch=False)
         self.files_table.place(relx = 0.1, rely=0.34, relheight=0.6, relwidth=0.87)
-
-
         return StorageFrame
     
     def create_LoginFrame(self) ->Ctk.CTkFrame:
@@ -149,10 +146,10 @@ class CClientGUI(CClientBL):
 
         # Run login in a background thread so the UI stays responsive during network calls.
         # Using lambda to create and start a Thread avoids blocking the mainloop.
-        self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_login).start())
+        self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_button_connect,args=("login",)).start())
         self._loginButton.place(relx=0.1, rely=0.47, relheight=0.06,relwidth= 0.135)
         
-        self._registerButton = Ctk.CTkButton(LoginFrame, text="Register", font=self.FONT, anchor="center", command=lambda: threading.Thread(target=self.on_click_register).start())
+        self._registerButton = Ctk.CTkButton(LoginFrame, text="Register", font=self.FONT, anchor="center", command=lambda: threading.Thread(target=self.on_click_button_connect,args=("register",)).start())
         self._registerButton.place(relx=0.24, rely=0.47, relheight=0.06,relwidth= 0.135)
 
 
@@ -160,7 +157,7 @@ class CClientGUI(CClientBL):
 
     def run(self) -> None: self.master.mainloop()
 
-    def on_click_login(self) -> None:
+    def on_click_button_connect(self, cmd: str) -> None:
         username: str = self._usernameEntry.get().lstrip()
         password: str = self._passwordEntry.get().lstrip()
         
@@ -172,41 +169,25 @@ class CClientGUI(CClientBL):
         self._loginButton.configure(state=Ctk.DISABLED)
         self._registerButton.configure(state=Ctk.DISABLED)
         # We call it from the background thread started by the button command above.
-        response , self.client = self.connect(username,password,"login")
+        response , self.client = self.connect(username,password,cmd)
         if self.client:
             # Create Storage Frame:
             self.LoginFrame.forget()
             self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
-            self.response_title.configure(text = response)
+            self.response_title.configure(text = response["message"])
+            for file in response["files"]:
+                datetime_obj: datetime = datetime.datetime.fromtimestamp(file["modified"])
+                # Extract only the date part
+                date_obj = datetime_obj.date()
+
+                # Output can also be formatted as a string (e.g., YYYY-MM-DD)
+                formatted_date = date_obj.strftime("%Y-%m-%d")
+                self.files_table.insert("","end",values= (file["filename"],round(file["filesize"]/1048576,2),formatted_date) )
            # threading.Thread(target=self.check_connection).start()
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
-        self._messageBox.configure(text=response)
-    def on_click_register(self) -> None:
-        username: str = self._usernameEntry.get().lstrip()
-        password: str = self._passwordEntry.get().lstrip()
-        
-        if not username or not password:
-            self._messageBox.configure(text="You must fill all the fields!")
-            return
-        self.remember_action(self.SAVE,username=username,password=password)
-        self._messageBox.configure(text="Connecting....")
-        self._loginButton.configure(state=Ctk.DISABLED)
-        self._registerButton.configure(state=Ctk.DISABLED)
-        # We call it from the background thread started by the button command above.
-        response , self.client = self.connect(username,password,"register")
-        if self.client:
-            # Create Storage Frame and adding to tab view:
-            self.LoginFrame.forget()
-            self.StorageFrame: Ctk.CTkFrame = self.create_StorageFrame()
-            self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
-            #threading.Thread(target=self.check_connection, daemon=True).start()
-        else:
-            self._loginButton.configure(state=Ctk.NORMAL)
-            self._registerButton.configure(state=Ctk.NORMAL)
-        self._messageBox.configure(text=response)
-        self.response_title.configure(text=response)
+        self._messageBox.configure(text=response["message"])
         
     def on_click_Upload(self) -> None:
         filename: str = fd.askopenfilename(
@@ -214,6 +195,7 @@ class CClientGUI(CClientBL):
         filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
         )
         if filename:
+
             self.toggle_buttons(self._uploadfile_button,self._savefile_button,self._deletefile_button,state=Ctk.DISABLED)
             enable_func = lambda: self.toggle_buttons(self._uploadfile_button,self,state=Ctk.NORMAL)
             self.progress_bar.set(0)
@@ -253,6 +235,7 @@ class CClientGUI(CClientBL):
                         self._usernameEntry.insert(0,values["username"])
                         self._passwordEntry.insert(0, values["password"])
                         self._checkBox.select()
+                        threading.Thread(target=self.on_click_button_connect,args=("login",)).start()
 
         except Exception as e:
             print(e)
@@ -262,7 +245,7 @@ class CClientGUI(CClientBL):
             try:
                 # Send a test message to server
                 print("Checking Server connection....")
-                self.client.send(b"ping")
+                self.client.send(b"!ping")
                 sleep(5)  # Check every 5 seconds
             except (ConnectionAbortedError):
                 

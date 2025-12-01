@@ -12,9 +12,9 @@ try:
     import os  # Import os for file system operations
     from tkinter.ttk import Treeview  # Import Treeview for GUI client table
     from typing import Callable, List, Tuple, Dict  # Type hints
-    from Server.protocol import *  # Import protocol definitions
+    from protocol import *  # Import protocol definitions
     import bcrypt  # Import bcrypt for password hashing
-    from Server.models import User,File,SessionLocal # Import db for Database operations
+    from models import User,File,SessionLocal # Import db for Database operations
     import struct
     from customtkinter import CTkTextbox
 except ModuleNotFoundError:
@@ -64,6 +64,10 @@ class CServerBL():
                     if (_user  := getUser(payload)):
                         self.createHandler(client, address,_user)  # Create handler thread
                         response = {"status": True, "message": f"Welcome back, {payload['username']}", "user": _user.toDict()}
+                        uid: int = _user.user_id
+                        files: list[dict[str, Any]] = files_by_id(uid)
+                        print(f"{files=}")
+                        response["files"] = files
                     else:
                         response = {"status": False, "message": "Username or password are Invalid!"}
 
@@ -74,6 +78,7 @@ class CServerBL():
                     if response["status"] == True:
                         user: User | None = getUser(payload)
                         response["user"] = user.toDict()
+                        response["files"] = []
                         self.createHandler(client,address,user)
                 # Send response to client
                 
@@ -91,10 +96,11 @@ class CServerBL():
             self.event.clear()  # Clear event flag
             self.write_to_log(f"[ServerBL] cleared flag!")
             for clientHandler in self.clientHandlers:
-                clientHandler.client.send(b"!DIS")
+                if clientHandler.client: clientHandler.client.send(b"!DIS")
                 self.write_to_log(f"closing {clientHandler}")
                 if clientHandler is not None:
                     clientHandler.disconnect()  # Disconnect client
+                    clientHandler.client.send(b"!DIS") # sending connection
                     clientHandler.join()  # Wait for thread to finish
             self.clientHandlers = []  # Clear handler list
             
@@ -142,7 +148,7 @@ class CClientHandler(threading.Thread):
     
     def __init__(self, client_socket: socket.socket, client_address, user: User, write_to_log) -> None:
         super().__init__()
-        self.client: socket.socket = client_socket
+        self.client: socket.socket | None= client_socket
         self.address: Tuple[str,int]  = client_address
         self.connected = True
         self.user: User = user
@@ -174,8 +180,11 @@ class CClientHandler(threading.Thread):
             except ConnectionResetError:
                 self.write_to_log("client was forced closed!")
                 #self.write_to_log(f"[CServerBL] -> [ClientHandler] Exception at run(): {e}")
+                self.disconnect()
+                self.connected = False
             except ConnectionAbortedError:
                 self.write_to_log("client connection Aborted!")
+                break
         self.disconnect()
         
     def disconnect(self) -> None:
@@ -184,7 +193,7 @@ class CClientHandler(threading.Thread):
         if self.client:
             self.client.close()
         self.client = None
-        self = None
+        del self
         
     def __repr__(self) -> str:
         return f"<ClientHandler({self.address=}, \n{self.client=})>"
