@@ -1,12 +1,13 @@
 
 
+from models import File
 
 
 try:
     from socket import socket
     from typing import Any
     from sqlalchemy.orm.session import Session
-    from sqlalchemy import and_
+    from sqlalchemy import and_, func, select
     import cryptography
     import logging
     from typing import Dict, Any, overload
@@ -15,23 +16,25 @@ try:
     from models import User, File, SessionLocal
     from datetime import datetime
     from uuid6 import uuid7
+    from models import File, User
     import os
+    from cryptography.fernet import Fernet
+    import zipfile
+    import io
 except ModuleNotFoundError:
     raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
-
-
-@overload
-def getUser(login: int) -> User | None: ...
-
-@overload
-def getUser(login: Dict[str,Any]) -> User | None: ...
 
 def username_exists(username: str, db: Session | None = None) -> bool: 
     if db is None:
         db = SessionLocal()
     result: bool = db.query(User).filter(User.username == username).first() is not None
     return result
-     
+
+@overload
+def getUser(login: int) -> User | None: ...
+
+@overload
+def getUser(login: Dict[str,Any]) -> User | None: ...
 
 def getUser(login: dict | int) -> 'User | None':
     """
@@ -82,6 +85,7 @@ def getUser(login: dict | int) -> 'User | None':
 
 
     pass
+
 def InsertUser(user: Dict[str,Any]) -> Dict:
     """Insert a new user into the database.
 
@@ -111,13 +115,12 @@ def InsertUser(user: Dict[str,Any]) -> Dict:
     finally:
         db.close()
 
-
 def files_by_id(uid: int) -> list[dict[str,Any]]:
     with SessionLocal() as db:
         files  = db.query(File).filter(File.user_id == uid).all()
         if not files:
             return []
-        return [ {"filename": f.filename, "filesize": f.filesize, "modified": f.modified} for f in files]
+        return [ {"file_id": f.file_id ,"filename": f.filename, "filesize": f.filesize, "modified": f.modified} for f in files]
 
 def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dict[str,Any] | None:
     """Uploading a file
@@ -131,54 +134,152 @@ def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dic
         dict[str,Any]: status response from server to client
     """    
 
-
     file_size: int = payload["filesize"]
-    if user.curr_storage + file_size > user.max_storage:
-        return {"status": False, "message": "You dont have enough storage!"}
+    file_bytes = b""
     received: int = 0
-    file_id: str = str(uuid7())
-    #file_path = f"./StorageFiles/{file_id}.bin"
-    file_path = f"./StorageFiles/{payload["filename"]}"
     try:
-        with open(file_path,"ab") as f:
-            while received < file_size:
-                chunk: bytes = client.recv(65536)
-                if not chunk:
-                    os.remove(file_path)
-                    break
-                f.write(chunk)
-                received += len(chunk)
+        chunk_size = 256 * 1024
+        while received < file_size:
+            chunk: bytes = client.recv(chunk_size)
+            if not chunk:
+                break
+            file_bytes += chunk
+            received += len(chunk)
     except BrokenPipeError:
-        os.remove(file_path)
         return None
     except ConnectionResetError:
-        os.remove(file_path)
         return None
-        
-    with SessionLocal() as db:
-        # attach user to the session
-        user_in_session = db.merge(user)
+    
+    return EncryptAndZip(file_bytes,payload,user)
 
-        new_file = File(
+
+def EncryptAndZip(file: bytes, payload:dict[str,Any], user: User):
+    with open("key.key","rb") as k:
+        key = k.read()
+    fernet = Fernet(key)
+
+
+    encrypted = fernet.encrypt(file)
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer,"w",zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr(payload["filename"],file)
+    
+    # Get the resulting ZIP file content as a bytes object
+    zipped_bytes: bytes = zip_buffer.getvalue()
+
+    file_id = str(uuid7())
+    
+    with open(file_id+".zip", "wb") as f:
+        f.write(encrypted)
+    
+    db = SessionLocal()
+    user_in_session = db.merge(user)
+    user_in_session.curr_storage += payload["filesize"]
+    uploaded_file =  File(
             file_id=file_id,
             filename=payload["filename"],
             filesize=payload["filesize"],
             modified=int(datetime.now().timestamp()),
             user_id=user.user_id
         )
+    db.add(uploaded_file)
+    db.commit()
+    db.close()
+    return {"status": True, "message": payload["filename"]+" Uploaded!","file_id":file_id}
 
-        user_in_session.curr_storage += new_file.filesize
-        user_in_session.files.append(new_file)
-        db.commit()
-    return {"status": True, "message": payload["filename"]+" Uploaded!"}
 
+
+def DeleteFile(file_ids: list[str], user: User)-> dict[str, Any]:
+    try:
+        with SessionLocal() as db:
+            # get the total size of all deleted files:
+            # generates SELECT SUM(filesize) FROM Files WHERE file_id IN {file_ids}
+            total_size: int = db.query(func.sum(File.filesize))\
+                                .filter(File.file_id.in_(file_ids))\
+                                .scalar() or 0
+            # delete all the files from the db
+            db.query(File)\
+            .filter(File.file_id.in_(file_ids))\
+            .delete(synchronize_session=False)
+            # attach user to the session
+            user_in_session = db.merge(user)
+            user_in_session.curr_storage -= total_size
+            db.commit()
+        for file_id in file_ids:
+            os.remove(file_id+".zip")
+        return {"status": True, "message": "File(s) deleted!"}
+    except Exception as e:
+        print(e)
+        return {"status": False, "message": "Couldn't delete this file."}
+
+
+
+def SendFile(client: socket.socket, file_id: str) -> None:
+    """_summary_
+
+    Args:
+        client (socket.socket): _description_
+        filename (str): _description_
+
+    Returns:
+        dict[str, Any]: _description_
+    """
+    with SessionLocal() as db:
+        file_name = db.query(File.filename).filter(File.file_id==file_id).one().tuple()[0]
+    with zipfile.ZipFile(file_id+".zip","r") as archive:
+        file_bytes = archive.read(file_name)
+    
+    with open("key.key", "rb") as k:
+        key = k.read()
+    fernet = Fernet(key)
+
+    decrypted_bytes= fernet.decrypt(file_bytes)
+    file_len = len(decrypted_bytes)
+    chunk_size= 1024 * 256
+    sent = 0
+    while chunk:= decrypted_bytes[sent:sent+chunk_size]:
+        if not chunk:
+            break
+        try:
+            client.sendall(chunk)
+            sent += len(chunk)
+        except (ConnectionAbortedError, ConnectionResetError):
+            return
+    return None
+
+
+
+
+def createLink(file_id: str)-> dict[str, Any]:
+    try:
+        with SessionLocal() as db:
+            file: File = db.query(File).filter(File.file_id == file_id).one()
+            return {"status": True,"message": "Share link created!", "link": ""}
+    except:
+        return {"status": False,"message": "Couldn't Create share link."}
 
 def handle_client_request(payload: dict[str, Any], client: socket.socket, user: User) -> dict[str, Any] | None:
-    response: dict[str, Any]  | None= {}
-    params: tuple[dict[str, Any], socket.socket, User] = (payload, client, user)
+    """Handling clients requests
+
+    Args:
+        payload (dict[str, Any]): client's requests with parameters.
+        client (socket.socket): client socket object.
+        user (User): client's user data.
+
+    Returns:
+        dict[str, Any] | None: Server Response.
+    """    
+    response: dict[str, Any] = {}
     match payload["cmd"]:
         case "upload":
-            response = UploadFile(*params)
+            response = UploadFile(payload, client, user)
+        case "delete":
+            response = DeleteFile(payload["ids"], user)
+        case "save":
+            response = SendFile(client,payload["filename"])
+        case "createLink":
+            response = createLink(payload["file_id"])
         case _:
             response = {"status": False, "message": "Invalid command"}
     return response

@@ -1,9 +1,3 @@
-
-
-from typing import Any
-from models import User
-
-
 try:
     from typing import Any, Dict
     import socket  # Import socket for networking
@@ -17,6 +11,9 @@ try:
     from models import User,File,SessionLocal # Import db for Database operations
     import struct
     from customtkinter import CTkTextbox
+    from run import run
+    import multiprocessing
+    import hashlib
 except ModuleNotFoundError:
     raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
 class CServerBL():
@@ -28,9 +25,11 @@ class CServerBL():
         self.clientHandlers: List[CClientHandler] = []  # List of client handler threads
         self.event = threading.Event()  # Event flag for server loop
         self.main_thread: threading.Thread | None = None  # Main server thread
+        self.web_server: multiprocessing.Process | None
         storage_folder_name = "./StorageFiles"  # Folder for storage
         if not os.path.exists(storage_folder_name):  # Create folder if not exists
             os.mkdir(storage_folder_name)
+        
         self.logger_box: None | CTkTextbox = None
     # Start the server
     def start_server(self) ->  None:
@@ -39,7 +38,9 @@ class CServerBL():
         Initializes and binds a TCP socket to self._ip and self._port, sets self.event,
         and begins listening for incoming client connections.
         """
+        self.web_server = multiprocessing.Process(target=run)
         self.write_to_log(self)  # Log server start
+        self.web_server.start()
         try:
             self.event.set()  # Set event flag
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create socket
@@ -80,11 +81,9 @@ class CServerBL():
                         response["user"] = user.toDict()
                         response["files"] = []
                         self.createHandler(client,address,user)
-                # Send response to client
                 
-                client.send(
-                    struct.pack("!Q",len(json.dumps(response).encode())) + json.dumps(response).encode()
-                )
+                # Send response to client 
+                client.send(struct.pack("!Q",len(json.dumps(response).encode())) + json.dumps(response).encode())
         except OSError as e:
             pass  # Ignore OS errors
         #except Exception as e:
@@ -93,18 +92,20 @@ class CServerBL():
     def stop_server(self) -> None:
         self.write_to_log(f"[ServerBL] stop_server() called")  # Log stop
         try:
+            self.web_server.kill()
+            self.web_server = None
             self.event.clear()  # Clear event flag
             self.write_to_log(f"[ServerBL] cleared flag!")
             for clientHandler in self.clientHandlers:
                 if clientHandler.client: clientHandler.client.send(b"!DIS")
                 self.write_to_log(f"closing {clientHandler}")
-                if clientHandler is not None:
-                    clientHandler.disconnect()  # Disconnect client
+                if clientHandler:
                     clientHandler.client.send(b"!DIS") # sending connection
+                    clientHandler.disconnect()  # Disconnect client
                     clientHandler.join()  # Wait for thread to finish
             self.clientHandlers = []  # Clear handler list
             
-            if self.server_socket is not None:
+            if self.server_socket:
                 self.server_socket.close()  # Close server socket
                 self.server_socket = None
             
@@ -174,14 +175,12 @@ class CClientHandler(threading.Thread):
                 response: dict[str, Any] = handle_client_request(payload,self.client,self.user) # Handle client request
                 self.write_to_log(f"{response =}")
                 if response:
-                    
                     response_bytes: bytes = json.dumps(response).encode()
                     self.client.send(struct.pack("!Q",len(response_bytes)) + response_bytes)
             except ConnectionResetError:
                 self.write_to_log("client was forced closed!")
                 #self.write_to_log(f"[CServerBL] -> [ClientHandler] Exception at run(): {e}")
-                self.disconnect()
-                self.connected = False
+                break
             except ConnectionAbortedError:
                 self.write_to_log("client connection Aborted!")
                 break

@@ -1,16 +1,15 @@
-from typing import Any
 
-from sqlalchemy.orm.relationships import _RelationshipDeclared
-from sqlalchemy.sql.schema import Column
+
 
 
 try:
-    import sqlite3
-    import bcrypt
+    from typing import Any
+    from sqlalchemy.sql.schema import Column
     from typing import Dict, Tuple, Any, overload
     from sqlalchemy import (
     create_engine, Column, Integer, String, Boolean, ForeignKey, Text, BigInteger )
     from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session
+    from flask_login import UserMixin
 except ModuleNotFoundError:
     raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
 
@@ -22,7 +21,7 @@ except ModuleNotFoundError:
 # -------------------------
 Base = declarative_base()
 
-class User(Base):
+class User(Base, UserMixin): # Класс Дла 
     """
     ORM model for a user in the system.
 
@@ -59,7 +58,7 @@ class User(Base):
             "tries":self.tries
         }
 
-class File(Base):
+class File(Base): # Класс Дла клиент
     """
     ORM model for a file uploaded by a user.
 

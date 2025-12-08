@@ -1,4 +1,3 @@
-
 import socket
 from typing import Tuple,BinaryIO
 import json
@@ -49,14 +48,11 @@ class CClientBL():
 
             response_length: bytes = _client_socket.recv(8)
             response = json.loads(_client_socket.recv(struct.unpack("!Q",response_length)[0]))
-            print(response)
             if response["status"] == True:
                 self.user = response["user"]
                 self.connected = True
-                print("connected!")
-                print(f"[CLIENT_BL] {_client_socket.getsockname()} connected")
-                print(f"{response=}")
                 self.files = response["files"]
+                self.user = response["user"]
                 return response, _client_socket
             else:
                 return response, None
@@ -78,11 +74,10 @@ class CClientBL():
                 "filename":  file.name.split("/")[-1],
                 "filesize": file_size
             }
-            encoded_json: bytes = json.dumps(payload).encode()
-            self.client.send(struct.pack("!Q",len(encoded_json)) + encoded_json) # type: ignore # send payload with 8-byte representation of size at the beginning
+            self.send_message(payload)
             sent: int = 0
-            
-            while chunk:= file.read(65536): # read file in chunks of 64 KB.
+            chunk_size = 256 * 1024
+            while chunk:= file.read(chunk_size): # read file in chunks of 256 KB.
                 
                 self.client.sendall(chunk) # type: ignore # send chunk
                 sent += len(chunk)
@@ -92,37 +87,39 @@ class CClientBL():
             response: dict[str, Any] = self.get_message()
             print(f"[CClientBl] received from server: {response}")
             if response["status"]:
-                print(response)
+                self.files.append({"file_id": response["file_id"] ,"filename": payload["filename"], "filesize": file_size})
+                self.user["curr_storage"] += file_size
                 progress_bar.set(0)
-                dateTime: str = datetime.now().strftime("%Y-%m-%D %H:%M")
-                files_table.insert("","end", values= (file.name.split("/")[-1], round(file_size/1048576,2),dateTime))
-                print(f"[CClientBL] {response=}")
+                dateTime: datetime = datetime.now().strftime("%Y-%m-%d")
+                files_table.insert("","end", values= (response["file_id"],file.name.split("/")[-1], str(round(file_size/1048576,2))+" MB",dateTime))
                 title.configure(text=f"{response["message"]}")
             enable() # type: ignore
 
         except Exception as e:
             print(e)
-
-    def disconnect(self) -> None:
-        self.connected = False
-        if self.client:
-            self.client.close()
-        self.client = None
     
+    def delete_files(self,file_ids: list[str], files_table: Treeview, selected_rows: tuple[str,...], title: CTkLabel) -> None:
+        payload = {
+            "cmd": "delete",
+            "ids": file_ids
+        }
+        self.send_message(payload)
+        response = self.get_message()
+        title.configure(text=response["message"])
+        if response["status"]:
+            files_table.delete(*selected_rows)
+    def send_message(self, payload: dict[str,Any]) -> None:
+        encoded_json: bytes = json.dumps(payload).encode()
+        self.client.send(struct.pack("!Q",len(encoded_json)) + encoded_json)  # send payload with 8-byte representation of size at the beginning
 
     def get_message(self) -> dict[str, Any]:
-        message_len_bytes: bytes = self.client.recv(8) # type: ignore
+        """Receiving response frm server
+
+        Returns:
+            dict[str, Any]: _description_
+        """        
+        message_len_bytes: bytes = self.client.recv(8)
         message_len: int = struct.unpack("!Q",message_len_bytes)[0]
-        payload: dict[str, Any] = json.loads(self.client.recv(message_len).decode()) # 
+        payload: dict[str, Any] = json.loads(self.client.recv(message_len).decode())
 
         return payload
-if __name__ == "__main__":
-    client: CClientBL | None = CClientBL()
-    msg, client.client = client.connect("username1234","password1234","login")
-    print(msg)
-    if not client.client:
-        exit()
-    print("sending file.....")
-    with open("./user.json","rb") as f:
-         client.sendfile(f,"upload") # type: ignore
-    

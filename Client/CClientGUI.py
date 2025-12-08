@@ -26,7 +26,7 @@ class CClientGUI(CClientBL):
         Ctk.set_default_color_theme("./themes/rime.json")
         Ctk.set_appearance_mode("Dark")
         self.master = Ctk.CTk()
-        self.FONT: tuple[str, int] = ("Helvetica",24)
+        self.FONT: tuple[str, int] = ("Roboto",22)
         # Login Frame widgets
         self._usernameLabel: Ctk.CTkLabel | None = None
         self._usernameEntry: Ctk.CTkEntry| None= None
@@ -37,6 +37,7 @@ class CClientGUI(CClientBL):
         self._savefile_button: Ctk.CTkLabel | None = None
         self._deletefile_button: Ctk.CTkButton | None = None
         self._uploadfile_button: Ctk.CTkButton | None = None
+        self.dis_button: Ctk.CTkButton | None = None
         self.files_table = None
         self._searchbar = None
         self._search_button = None  
@@ -77,7 +78,7 @@ class CClientGUI(CClientBL):
                                           border_color="#00aeff",fg_color="#6E8BA4",progress_color="#22559b",mode="determinate",
                                           determinate_speed=5,indeterminate_speed=.5)
         self.progress_bar.place(relx = 0.1, rely=0.19, relheight=0.019, relwidth=0.87)
-        self.progress_bar.set(0.6)
+        self.progress_bar.set(0)
 
         self._searchbar = Ctk.CTkEntry(StorageFrame, placeholder_text= "Search for files...", font = self.FONT)
         self._searchbar.place(relx = 0.1, rely=0.1, relheight=0.06, relwidth=0.65)
@@ -91,8 +92,14 @@ class CClientGUI(CClientBL):
         self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save 💾", font=self.FONT, anchor="center", state="disabled") # pyright: ignore[reportAttributeAccessIssue]
         self._savefile_button.place(relx= 0.35, rely=0.22, relheight=0.06, relwidth=0.15)  
 
-        self._deletefile_button = Ctk.CTkButton(StorageFrame, text="Delete 🗑️", font=self.FONT, anchor="center", state="disabled")
+        self._deletefile_button = Ctk.CTkButton(StorageFrame, text="Delete 🗑️", font=self.FONT, anchor="center", state="disabled", command=lambda: threading.Thread(target=self.on_click_delete).run())
         self._deletefile_button.place(relx=0.6, rely=0.22, relheight=0.06, relwidth=0.15)
+
+        # code from: https://github.com/israel-dryer/TkFontAwesome
+        # icon from: https://fontawesome.com/icons/user-slash?f=classic&s=solid
+        from tkfontawesome import icon_to_image
+        #self.dis_button = Ctk.CTkButton(StorageFrame, font=self.FONT, anchor="center", image=icon_to_image("user-slash", scale_to_height=0.06*self.height, scale_to_width=self.height*0.06,fill="#ff0000"))
+        #self.dis_button.place()
 
         style = ttk.Style() 
         style.theme_use("default")
@@ -103,17 +110,22 @@ class CClientGUI(CClientBL):
                             rowheight=30,
                             fieldbackground="#6E8BA400",
                             bordercolor="#6E8BA4",
-                            borderwidth=0, font=("Helvetica",16))
+                            borderwidth=0, font=("Roboto",12))
         style.map('Treeview', background=[('selected', "#454950")])
     
         style.configure("Treeview.Heading",background="#2a2d2e",foreground="white",relief="flat", font=self.FONT)
         style.map("Treeview.Heading",background=[('active', "#2a2d2e")])
-        columns: tuple[Literal['file name'], Literal['file size (MB)'], Literal['Date modified']] = ("file name", "file size (MB)", "Date modified")
+        columns = ("#","file name", "size", "Date modified")
         self.files_table = ttk.Treeview(StorageFrame, columns=columns, show="headings")
         for col in columns:
-            self.files_table.heading(col, text=col,anchor="center")
-            self.files_table.column(col, width=int(0.87*self.width/len(columns)), anchor="center", stretch=False)
+            self.files_table.heading(col, text=col,anchor="w")
+            self.files_table.column(col, anchor="w", stretch=False)
+        self.files_table.column("#",width=int(0.1*0.87*self.width))
+        self.files_table.column("Date modified",width=int(0.2*0.87*self.width))
+        self.files_table.column("file name",width=int(0.6*0.87*self.width))
+        self.files_table.column("size",width=int(0.1*0.87*self.width))
         self.files_table.place(relx = 0.1, rely=0.34, relheight=0.6, relwidth=0.87)
+        self.files_table.bind("<<TreeviewSelect>>",lambda _: self._deletefile_button.configure(state=Ctk.ACTIVE))
         return StorageFrame
     
     def create_LoginFrame(self) ->Ctk.CTkFrame:
@@ -153,6 +165,7 @@ class CClientGUI(CClientBL):
         self._registerButton.place(relx=0.24, rely=0.47, relheight=0.06,relwidth= 0.135)
 
 
+
         return LoginFrame
 
     def run(self) -> None: self.master.mainloop()
@@ -182,7 +195,7 @@ class CClientGUI(CClientBL):
 
                 # Output can also be formatted as a string (e.g., YYYY-MM-DD)
                 formatted_date = date_obj.strftime("%Y-%m-%d")
-                self.files_table.insert("","end",values= (file["filename"],round(file["filesize"]/1048576,2),formatted_date) )
+                self.files_table.insert("","end",values= (file["file_id"],file["filename"],str(round(file["filesize"]/1048576,2))+" MB",formatted_date))
            # threading.Thread(target=self.check_connection).start()
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
@@ -248,18 +261,33 @@ class CClientGUI(CClientBL):
                 self.client.send(b"!ping")
                 sleep(5)  # Check every 5 seconds
             except (ConnectionAbortedError):
-                
                 # If connection fails, return to login screen
                 self.StorageFrame.forget()
-                self.LoginFrame.pack(fill="both", expand=True, padx=10, pady=10)
+                
                 self._messageBox.configure(text="Connection lost")
-                self._loginButton.configure(state=Ctk.NORMAL)
-                self._registerButton.configure(state=Ctk.NORMAL)
+                self.disconnect()
                 break
     
+    def on_click_delete(self) -> None:
+        selected_rows = self.files_table.selection()
+        selected_files = [self.files_table.item(row)["values"][0] for row in selected_rows]
+        self.delete_files(selected_files, self.files_table,selected_rows,self.response_title)
+
     def toggle_buttons(self,*buttons:Ctk.CTkButton, state: str) -> None:
-        for i in range(1,len(buttons)): # skip "self" when passing the reference: "CClientGUI"
+        for i in range(len(buttons)-1): # skip "self" when passing the reference: "CClientGUI"
             buttons[i].configure(state=state)
+    
+    def disconnect(self) -> None:
+        self.connected = False
+        if self.client:
+            self.client.send(b"!DIS")
+            self.client.close()
+        self.client = None
+        self.files_table.delete(*self.files_table.get_children()) # get all rows and extract them in the function
+        self.LoginFrame.forget()
+        self.LoginFrame.pack(fill="both", expand=True, padx=10, pady=10)
+        self._checkBox.deselect()
+        self.remember_action(self.GET)
 if __name__ == "__main__":
     try:
         print("Press Ctrl + C to exit.")
