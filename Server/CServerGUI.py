@@ -20,10 +20,7 @@ class CServerGUI(CServerBL):
         self.bg_color: str = self.master._apply_appearance_mode(CTk.ThemeManager.theme["CTkFrame"]["fg_color"])
         self.text_color: str = self.master._apply_appearance_mode(CTk.ThemeManager.theme["CTkLabel"]["text_color"])
         self.selected_color: str = self.master._apply_appearance_mode(CTk.ThemeManager.theme["CTkButton"]["fg_color"])
-
-
-
-        self.create_ui()
+        self.create_ui()   
     
     def create_ui(self) -> None:
         self.master.geometry(f"{self.width}x{self.height}")
@@ -38,8 +35,7 @@ class CServerGUI(CServerBL):
 
         self.logger_box = CTk.CTkTextbox(self.master,font=("consolas",12),text_color="#069926")
         self.logger_box.place(relx=0.05, rely=0.34,relheight=0.6,relwidth=0.9)
-
-
+    
     def toggle_server(self) -> None:
         if self.serverSwitch.get() == "on":
             self.write_to_log("on")

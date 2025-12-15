@@ -7,3 +7,4 @@ bcrypt
 SQLAlchemy
 uuid6
 flask
+pillow

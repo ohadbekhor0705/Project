@@ -1,7 +1,6 @@
 from datetime import datetime
-from typing import Literal
 
-
+from customtkinter.windows.widgets.ctk_frame import CTkFrame
 try:
     import customtkinter as Ctk
     from tkinter import ttk
@@ -10,23 +9,22 @@ try:
     import threading
     import json
     import os
-    from time import sleep
-    import bcrypt
-    import struct
-    from typing import List
     import datetime
+    from tkfontawesome import icon_to_image
+    from PIL import ImageTk, Image
 except ModuleNotFoundError:
     print("please run command on the terminal: pip install -r requirements.txt")
+    quit()
 class CClientGUI(CClientBL):
     
-    def __init__(self) -> None:  # Метод __init__ для инициализации
+    def __init__(self) -> None: 
         super().__init__()
         # Load a custom color theme file for customtkinter. This points to the bundled theme JSON.
         # If the path is wrong the library will fall back to defaults, so keep the file with the project.
-        Ctk.set_default_color_theme("./themes/rime.json")
+        Ctk.set_default_color_theme("./themes/orange.json")
         Ctk.set_appearance_mode("Dark")
         self.master = Ctk.CTk()
-        self.FONT: tuple[str, int] = ("Roboto",22)
+        self.FONT: tuple[str, int] = ("Roboto",17.8)
         # Login Frame widgets
         self._usernameLabel: Ctk.CTkLabel | None = None
         self._usernameEntry: Ctk.CTkEntry| None= None
@@ -44,132 +42,145 @@ class CClientGUI(CClientBL):
         self.progress_bar = None
         self.response_title = None  
 
-        self.StorageFrame: Ctk.CTkFrame | None = None
-        self.LoginFrame: Ctk.CTkFrame | None= None 
-        
-        self.height, self.width = 750, 1300
+
+        self.tabview = Ctk.CTkTabview(self.master)
+        self.login_tab: CTkFrame   = self.tabview.add("Login")
+        self.height, self.width = 750, 1500
         self.SAVE = "SAVE"
         self.GET = "GET"
-        
+        self.operation_thread: threading.Thread | None = None
         self.create_ui()
     
-
     def create_ui(self) -> None:
         """Assembling UI elements
         """        
-
         self.master.geometry(f"{self.width}x{self.height}")
         # Create Tabs
         self.master.resizable(False, False)
+        self.tabview.pack(fill="both", expand=True)
+        self.create_LoginFrame()
 
-        self.LoginFrame = self.create_LoginFrame()
-        self.LoginFrame.pack(fil="both", expand=True, padx=10, pady=10)
-        self.StorageFrame = self.create_StorageFrame()
-
-    def create_StorageFrame(self) -> Ctk.CTkFrame:
-        # creating STORAGE UI widgets:
-
-        StorageFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.master)
-
-        self.response_title = Ctk.CTkLabel(StorageFrame, text="Hi, {username}", anchor="center",font=self.FONT)
+    def create_StorageFrame(self):
+        # Greeting Label
+        self.response_title = Ctk.CTkLabel(self.storage_tab, text=f"Hi, {self.username}", anchor="center", font=self.FONT)
         self.response_title.place(relx=0.5, rely=0.04, anchor="center")
 
-        self.progress_bar = Ctk.CTkProgressBar(StorageFrame,corner_radius=20,border_width=2,orientation="horizontal",
-                                          border_color="#00aeff",fg_color="#6E8BA4",progress_color="#22559b",mode="determinate",
-                                          determinate_speed=5,indeterminate_speed=.5)
-        self.progress_bar.place(relx = 0.1, rely=0.19, relheight=0.019, relwidth=0.87)
-        self.progress_bar.set(0)
+        # Progress Bar
+        self.progress_bar = Ctk.CTkProgressBar(
+            self.storage_tab,
+            corner_radius=20,
+            border_width=2,
+            orientation="horizontal",
+            border_color="#FF8C42",
+            fg_color="#FF8C42",
+            progress_color="#AF6131",
+            mode="determinate",
+            determinate_speed=5,
+            indeterminate_speed=0.5
+        )
+        self.progress_bar.place(relx=0.1, rely=0.15, relheight=0.03, relwidth=0.87)
+        self.progress_bar.set(0)   
+        # Button Frame for better organization
+        self.button_frame = Ctk.CTkLabel(self.storage_tab, text="", fg_color=None)
+        self.button_frame.place(relx=0.1, rely=0.22, relwidth=0.87)
+        # Buttons
+        self._uploadfile_button = Ctk.CTkButton(self.button_frame, text="Upload 📤", font=self.FONT, anchor="center", command=self.on_click_Upload)
+        self._savefile_button = Ctk.CTkButton(self.button_frame, text="Save 💾", font=self.FONT, anchor="center", command=self.save_file)
+        self._deletefile_button = Ctk.CTkButton(self.button_frame, text="Delete 🗑️", font=self.FONT, anchor="center", command=self.on_click_delete)  
+       
+        self._create_link_button = Ctk.CTkButton(
+            self.button_frame,
+            text="Create Link 🔗",
+            font=self.FONT,
+            anchor="center",
+            compound="left"
+        )
 
-        self._searchbar = Ctk.CTkEntry(StorageFrame, placeholder_text= "Search for files...", font = self.FONT)
-        self._searchbar.place(relx = 0.1, rely=0.1, relheight=0.06, relwidth=0.65)
-
-        self._search_button = Ctk.CTkButton(StorageFrame, text="🔍", font=self.FONT, command=lambda: self.StorageFrame.forget())
-        self._search_button.place(relx= 0.77, rely=0.1, relheight=0.06, relwidth=0.2)  
-
-        self._uploadfile_button = Ctk.CTkButton(StorageFrame, text= "Upload 📤", font = self.FONT, anchor="center", command=self.on_click_Upload)
-        self._uploadfile_button.place(relx= 0.1, rely=0.22, relheight=0.06, relwidth=0.15) 
-
-        self._savefile_button = Ctk.CTkButton(StorageFrame, text="Save 💾", font=self.FONT, anchor="center", state="disabled") # pyright: ignore[reportAttributeAccessIssue]
-        self._savefile_button.place(relx= 0.35, rely=0.22, relheight=0.06, relwidth=0.15)  
-
-        self._deletefile_button = Ctk.CTkButton(StorageFrame, text="Delete 🗑️", font=self.FONT, anchor="center", state="disabled", command=lambda: threading.Thread(target=self.on_click_delete).run())
-        self._deletefile_button.place(relx=0.6, rely=0.22, relheight=0.06, relwidth=0.15)
-
-        # code from: https://github.com/israel-dryer/TkFontAwesome
-        # icon from: https://fontawesome.com/icons/user-slash?f=classic&s=solid
-        from tkfontawesome import icon_to_image
-        #self.dis_button = Ctk.CTkButton(StorageFrame, font=self.FONT, anchor="center", image=icon_to_image("user-slash", scale_to_height=0.06*self.height, scale_to_width=self.height*0.06,fill="#ff0000"))
-        #self.dis_button.place()
-
-        style = ttk.Style() 
+        # Pack buttons with spacing
+        buttons = [self._uploadfile_button, self._savefile_button, self._deletefile_button, self._create_link_button]
+        for i, btn in enumerate(buttons):
+            btn.grid(row=0, column=i, padx=(0 if i == 0 else 10, 0), sticky="w") 
+        # Treeview styling
+        style = ttk.Style()
         style.theme_use("default")
-        # code from: https://github.com/TomSchimansky/CustomTkinter/discussions/431
         style.configure("Treeview",
-                            background="#2a2d2e",
-                            foreground="white",
-                            rowheight=30,
-                            fieldbackground="#6E8BA400",
-                            bordercolor="#6E8BA4",
-                            borderwidth=0, font=("Roboto",12))
+                        background="#2a2d2e",
+                        foreground="white",
+                        rowheight=30,
+                        fieldbackground="#6E8BA400",
+                        bordercolor="#6E8BA4",
+                        borderwidth=0,
+                        font=("Roboto", 12))
         style.map('Treeview', background=[('selected', "#454950")])
-    
-        style.configure("Treeview.Heading",background="#2a2d2e",foreground="white",relief="flat", font=self.FONT)
-        style.map("Treeview.Heading",background=[('active', "#2a2d2e")])
-        columns = ("#","file name", "size", "Date modified")
-        self.files_table = ttk.Treeview(StorageFrame, columns=columns, show="headings")
+        style.configure("Treeview.Heading", background="#2a2d2e", foreground="white", relief="flat", font=self.FONT)
+        style.map("Treeview.Heading", background=[('active', "#2a2d2e")])  
+        columns = ("#", "file name", "size", "Date modified")
+        self.files_table = ttk.Treeview(self.storage_tab, columns=columns, show="headings")
         for col in columns:
-            self.files_table.heading(col, text=col,anchor="w")
+            self.files_table.heading(col, text=col, anchor="w")
             self.files_table.column(col, anchor="w", stretch=False)
-        self.files_table.column("#",width=int(0.1*0.87*self.width))
-        self.files_table.column("Date modified",width=int(0.2*0.87*self.width))
-        self.files_table.column("file name",width=int(0.6*0.87*self.width))
-        self.files_table.column("size",width=int(0.1*0.87*self.width))
-        self.files_table.place(relx = 0.1, rely=0.34, relheight=0.6, relwidth=0.87)
-        self.files_table.bind("<<TreeviewSelect>>",lambda _: self._deletefile_button.configure(state=Ctk.ACTIVE))
-        return StorageFrame
-    
-    def create_LoginFrame(self) ->Ctk.CTkFrame:
-        
-        # creating Login UI widgets:
+        self.files_table.column("#", width=int(0.1*0.87*self.width))
+        self.files_table.column("Date modified", width=int(0.2*0.87*self.width))
+        self.files_table.column("file name", width=int(0.6*0.87*self.width))
+        self.files_table.column("size", width=int(0.1*0.87*self.width))
+        self.files_table.place(relx=0.1, rely=0.34, relheight=0.6, relwidth=0.87)
 
-        LoginFrame: Ctk.CTkFrame = Ctk.CTkFrame(self.master)
-
-        self._messageBox = Ctk.CTkLabel(LoginFrame, text="",font=self.FONT)
-        self._messageBox.place(relx = 0.07, rely = 0.05, relheight=0.06, relwidth=0.4)
-        
-        self._usernameLabel = Ctk.CTkLabel(LoginFrame, text="Username:", font=self.FONT, anchor="center")
-        self._usernameLabel.place(relx = 0.1, rely = 0.15, relheight=0.06, relwidth=0.15)
-
-        self._usernameEntry = Ctk.CTkEntry(LoginFrame, placeholder_text="Username", font=self.FONT)
-        self._usernameEntry.place(relx=0.24, rely=0.15, relheight=0.06, relwidth=0.15)
-
-        self._passwordLabel = Ctk.CTkLabel(LoginFrame,text= "Password:", font = self.FONT, anchor="center")
-        self._passwordLabel.place(relx = 0.1, rely=0.27, relheight=0.06, relwidth=0.15)
-
-        self._passwordEntry = Ctk.CTkEntry(LoginFrame, placeholder_text="Password", font= self.FONT, show="*")
-        self._passwordEntry.place(relx = 0.24, rely = 0.27, relheight=0.06, relwidth=0.15)
-        
-        self._checkBox = Ctk.CTkCheckBox(LoginFrame, text="Remember me?",offvalue="False", onvalue="True" ,font=self.FONT)
-        self._checkBox.place(relx=0.12, rely=0.37, relheight=0.06,relwidth= 0.3)
-        # Attempt to pre-fill username/password from a local file if the user previously
-        # selected "Remember me". This reads ./user.json and inserts values in the fields.
-        # If the file doesn't exist nothing happens.
+    def create_LoginFrame(self):
+        # Make login_tab fully stretch
+        self.login_tab.grid_rowconfigure(0, weight=1)
+        self.login_tab.grid_columnconfigure(0, weight=1)
+        # Full-screen container
+        self.login_container = Ctk.CTkFrame(self.login_tab, corner_radius=0)
+        self.login_container.grid(row=0, column=0, sticky="nsew")
+        # Add a background color or gradient
+        self.login_container.configure(fg_color="#1E1E1E")  # dark gray background
+        # Top section for welcome message or logo
+        self.top_section = Ctk.CTkFrame(self.login_container, fg_color="transparent")
+        self.top_section.pack(fill="both", expand=True)
+        self.welcome_label = Ctk.CTkLabel(
+            self.top_section, text="Welcome to SkyVault!", font=("Arial", 36), anchor="center"
+        )
+        self.welcome_label.pack(expand=True)
+        # Center section for username/password
+        self.center_section = Ctk.CTkFrame(self.login_container, fg_color="#2E2E2E", corner_radius=10)
+        self.center_section.pack(pady=20, padx=40, fill="both", expand=True)
+        # Message box
+        self._messageBox = Ctk.CTkLabel(self.center_section, text="", font=self.FONT, anchor="center")
+        self._messageBox.pack(pady=(10, 20))
+        # Username
+        username_frame = Ctk.CTkFrame(self.center_section, fg_color="transparent")
+        username_frame.pack(fill="x", padx=20, pady=(0, 10))
+        self._usernameLabel = Ctk.CTkLabel(username_frame, text="Username:", font=self.FONT, width=100, anchor="w")
+        self._usernameLabel.pack(side="left")
+        self._usernameEntry = Ctk.CTkEntry(username_frame, placeholder_text="Username", font=self.FONT)
+        self._usernameEntry.pack(side="right", fill="x", expand=True)
+        # Password
+        password_frame = Ctk.CTkFrame(self.center_section, fg_color="transparent")
+        password_frame.pack(fill="x", padx=20, pady=(0, 10))
+        self._passwordLabel = Ctk.CTkLabel(password_frame, text="Password:", font=self.FONT, width=100, anchor="w")
+        self._passwordLabel.pack(side="left")
+        self._passwordEntry = Ctk.CTkEntry(password_frame, placeholder_text="Password", font=self.FONT, show="*")
+        self._passwordEntry.pack(side="right", fill="x", expand=True)
+        # Remember me
+        self._checkBox = Ctk.CTkCheckBox(self.center_section, text="Remember me?", offvalue="False", onvalue="True", font=self.FONT)
+        self._checkBox.pack(pady=(0, 20))
+        # Buttons
+        button_frame = Ctk.CTkFrame(self.center_section, fg_color="transparent")
+        button_frame.pack(pady=(0, 20))
+        self._loginButton = Ctk.CTkButton(button_frame, text="Login", font=self.FONT, command=lambda: threading.Thread(target=self.on_click_button_connect, args=("login",)).start())
+        self._loginButton.pack(side="left", padx=10, expand=True, fill="x")
+        self._registerButton = Ctk.CTkButton(button_frame, text="Register", font=self.FONT, command=lambda: threading.Thread(target=self.on_click_button_connect, args=("register",)).start())
+        self._registerButton.pack(side="right", padx=10, expand=True, fill="x")
+        # Bottom section (can add extra info, copyright, etc.)
+        self.bottom_section = Ctk.CTkFrame(self.login_container, fg_color="transparent")
+        self.bottom_section.pack(fill="both", expand=True)
+        self.info_label = Ctk.CTkLabel(self.bottom_section, text="All rights reserved.", font=("Arial", 12))
+        self.info_label.pack(side="bottom", pady=10)
+        # Pre-fill username/password if "Remember me"
         self.remember_action(self.GET)
 
-        # Run login in a background thread so the UI stays responsive during network calls.
-        # Using lambda to create and start a Thread avoids blocking the mainloop.
-        self._loginButton = Ctk.CTkButton(LoginFrame, text="Login", font=self.FONT, anchor="center",command=lambda: threading.Thread(target=self.on_click_button_connect,args=("login",)).start())
-        self._loginButton.place(relx=0.1, rely=0.47, relheight=0.06,relwidth= 0.135)
-        
-        self._registerButton = Ctk.CTkButton(LoginFrame, text="Register", font=self.FONT, anchor="center", command=lambda: threading.Thread(target=self.on_click_button_connect,args=("register",)).start())
-        self._registerButton.place(relx=0.24, rely=0.47, relheight=0.06,relwidth= 0.135)
-
-
-
-        return LoginFrame
-
     def run(self) -> None: self.master.mainloop()
-
+    
     def on_click_button_connect(self, cmd: str) -> None:
         username: str = self._usernameEntry.get().lstrip()
         password: str = self._passwordEntry.get().lstrip()
@@ -185,8 +196,9 @@ class CClientGUI(CClientBL):
         response , self.client = self.connect(username,password,cmd)
         if self.client:
             # Create Storage Frame:
-            self.LoginFrame.forget()
-            self.StorageFrame.pack(expand=True, fill="both", padx=10, pady=10)
+            self.storage_tab: CTkFrame   = self.tabview.add("Storage")
+            self.create_StorageFrame()
+            self.tabview.set("Storage")
             self.response_title.configure(text = response["message"])
             for file in response["files"]:
                 datetime_obj: datetime = datetime.datetime.fromtimestamp(file["modified"])
@@ -201,23 +213,25 @@ class CClientGUI(CClientBL):
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
         self._messageBox.configure(text=response["message"])
-        
+
     def on_click_Upload(self) -> None:
+        # if other tasks are running then prevent from user from sending other network requests
+        if self.operation_thread  and self.operation_thread.is_alive():
+            print("Another task is running!")
+            return 
         filename: str = fd.askopenfilename(
         title="Open a file",
         filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
         )
         if filename:
 
-            self.toggle_buttons(self._uploadfile_button,self._savefile_button,self._deletefile_button,state=Ctk.DISABLED)
-            enable_func = lambda: self.toggle_buttons(self._uploadfile_button,self,state=Ctk.NORMAL)
             self.progress_bar.set(0)
             f = open(filename,"rb")
-            sending_thread = threading.Thread(target=self.sendfile, args=(f,"upload",self.progress_bar,self.files_table,self.response_title,enable_func))
-            sending_thread.start()
+            self.operation_thread = threading.Thread(target=self.sendfile, args=(f,"upload",self.progress_bar,self.files_table,self.response_title))
+            self.operation_thread.start()
         else:
             self.response_title.configure(text="File not found! Please select a file again.") 
-    
+
     def remember_action(self, action: str, **user_data)  -> None:
        
         try: 
@@ -252,42 +266,36 @@ class CClientGUI(CClientBL):
 
         except Exception as e:
             print(e)
-
-    def check_connection(self) -> None:
-        while True:
-            try:
-                # Send a test message to server
-                print("Checking Server connection....")
-                self.client.send(b"!ping")
-                sleep(5)  # Check every 5 seconds
-            except (ConnectionAbortedError):
-                # If connection fails, return to login screen
-                self.StorageFrame.forget()
-                
-                self._messageBox.configure(text="Connection lost")
-                self.disconnect()
-                break
     
+    def save_file(self):
+        if self.operation_thread and self.operation_thread.is_alive():
+            return 
+        selected_row = self.files_table.selection()[0]
+        values: list[str] = self.files_table.item(selected_row)["values"]
+        file_id, filename, file_size, _ = values
+
+        self.operation_thread = threading.Thread(target=self.ReceiveFile, args=(self.progress_bar,file_id,filename,float(file_size.split(" ")[0])*1048576))
+        self.operation_thread.start()
+
     def on_click_delete(self) -> None:
+        if self.operation_thread and self.operation_thread.is_alive():
+            return 
         selected_rows = self.files_table.selection()
         selected_files = [self.files_table.item(row)["values"][0] for row in selected_rows]
-        self.delete_files(selected_files, self.files_table,selected_rows,self.response_title)
+        self.operation_thread = threading.Thread(target=self.delete_files,args=(selected_files, self.files_table,selected_rows,self.response_title))
+        self.operation_thread.start()
 
-    def toggle_buttons(self,*buttons:Ctk.CTkButton, state: str) -> None:
-        for i in range(len(buttons)-1): # skip "self" when passing the reference: "CClientGUI"
-            buttons[i].configure(state=state)
-    
-    def disconnect(self) -> None:
+    def logout(self) -> None:
         self.connected = False
         if self.client:
             self.client.send(b"!DIS")
             self.client.close()
         self.client = None
         self.files_table.delete(*self.files_table.get_children()) # get all rows and extract them in the function
-        self.LoginFrame.forget()
-        self.LoginFrame.pack(fill="both", expand=True, padx=10, pady=10)
-        self._checkBox.deselect()
+        self.tabview.delete("Storage")
+        self.tabview.set("Login")
         self.remember_action(self.GET)
+
 if __name__ == "__main__":
     try:
         print("Press Ctrl + C to exit.")

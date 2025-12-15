@@ -1,3 +1,6 @@
+from typing import Any
+
+
 try:
     from typing import Any, Dict
     import socket  # Import socket for networking
@@ -14,14 +17,22 @@ try:
     from run import run
     import multiprocessing
     import hashlib
+    from cryptography.hazmat.primitives.asymmetric import rsa, padding
+    from cryptography.hazmat.primitives import serialization
+    from cryptography import fernet
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.primitives import hashes
+
 except ModuleNotFoundError:
     raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
+
+
 class CServerBL():
     def __init__(self) -> None:
         self._ip: str = "0.0.0.0"  # Server IP address
         self._port: int = 9999  # Server port
         self.server_socket: socket.socket | None = None  # Main server socket
-        self.clients_table: Treeview | None = None  # GUI table for clients
+        self.logger_box = None
         self.clientHandlers: List[CClientHandler] = []  # List of client handler threads
         self.event = threading.Event()  # Event flag for server loop
         self.main_thread: threading.Thread | None = None  # Main server thread
@@ -29,8 +40,16 @@ class CServerBL():
         storage_folder_name = "./StorageFiles"  # Folder for storage
         if not os.path.exists(storage_folder_name):  # Create folder if not exists
             os.mkdir(storage_folder_name)
-        
-        self.logger_box: None | CTkTextbox = None
+
+
+        self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.public_key = self.private_key.public_key()
+
+        # Export public key to send to client
+        self.pem_public = self.public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo)
+
     # Start the server
     def start_server(self) ->  None:
         """
@@ -39,8 +58,8 @@ class CServerBL():
         and begins listening for incoming client connections.
         """
         self.web_server = multiprocessing.Process(target=run)
-        self.write_to_log(self)  # Log server start
-        self.web_server.start()
+        #self.write_to_log(self)  # Log server start
+        #self.web_server.start()
         try:
             self.event.set()  # Set event flag
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Create socket
@@ -49,11 +68,26 @@ class CServerBL():
             self.write_to_log(f"[SERVER] is running at \nIP: {socket.gethostbyname(socket.gethostname())} \nPORT: {self._port}")
             while self.event.is_set() and self.server_socket is not None:  # Main accept loop
                 client, address = self.server_socket.accept()  # Accept new client
+                client.send(struct.pack("!Q",len(self.pem_public)) + self.pem_public) # Sending public key to client
+                
+
+                encrypted_session_key_len_bytes = client.recv(8)
+                encrypted_session_key = client.recv(struct.unpack("!Q",encrypted_session_key_len_bytes)[0])
+                session_key = self.private_key.decrypt(
+                    encrypted_session_key,
+                    padding.OAEP(
+                        mgf=padding.MGF1(algorithm=hashes.SHA256()),  # mask generation function
+                        algorithm=hashes.SHA256(),                     # hash algorithm for OAEP itself
+                        label=None
+                    )
+                )
+
+                f = fernet.Fernet(session_key)
                 self.write_to_log(client)
                 # getting payload from client
                 payload_length_bytes: bytes = client.recv(8) 
-                payload_bytes: bytes = client.recv(struct.unpack("!Q",payload_length_bytes)[0])
-                payload: dict = json.loads(payload_bytes.decode())
+                payload_bytes: bytes = f.decrypt(client.recv(struct.unpack("!Q",payload_length_bytes)[0])).decode()
+                payload: dict = json.loads(payload_bytes.encode())
                 self.write_to_log(f"[CClientBL] Authentication payload received: {payload}")
             
                 response = {
@@ -63,7 +97,7 @@ class CServerBL():
                 # Handle login command
                 if payload["cmd"] == "login":
                     if (_user  := getUser(payload)):
-                        self.createHandler(client, address,_user)  # Create handler thread
+                        self.createHandler(client, address,_user, f)  # Create handler thread
                         response = {"status": True, "message": f"Welcome back, {payload['username']}", "user": _user.toDict()}
                         uid: int = _user.user_id
                         files: list[dict[str, Any]] = files_by_id(uid)
@@ -80,25 +114,26 @@ class CServerBL():
                         user: User | None = getUser(payload)
                         response["user"] = user.toDict()
                         response["files"] = []
-                        self.createHandler(client,address,user)
+                        self.createHandler(client,address,user,f)
                 
                 # Send response to client 
-                client.send(struct.pack("!Q",len(json.dumps(response).encode())) + json.dumps(response).encode())
+                encrypted_response = f.encrypt(json.dumps(response).encode())
+                client.send(struct.pack("!Q",len(encrypted_response)) + encrypted_response)
         except OSError as e:
             pass  # Ignore OS errors
         #except Exception as e:
         #    self.write_to_log(f"[ServerBL] Exception at start_server(): {e}")  # Log other exceptions
 
     def stop_server(self) -> None:
+        """Stopping the server
+        """        
         self.write_to_log(f"[ServerBL] stop_server() called")  # Log stop
         try:
-            self.web_server.kill()
+            #self.web_server.kill()
             self.web_server = None
             self.event.clear()  # Clear event flag
             self.write_to_log(f"[ServerBL] cleared flag!")
             for clientHandler in self.clientHandlers:
-                if clientHandler.client: clientHandler.client.send(b"!DIS")
-                self.write_to_log(f"closing {clientHandler}")
                 if clientHandler:
                     clientHandler.client.send(b"!DIS") # sending connection
                     clientHandler.disconnect()  # Disconnect client
@@ -114,8 +149,16 @@ class CServerBL():
         except Exception as e:
             self.write_to_log(f"[ServerBL] Exception at stop_server(): {e}")  # Log exceptions
 
-    def createHandler(self, client_socket: socket.socket, client_address, user: User) -> None:
-        client_handler: CClientHandler = CClientHandler(client_socket, client_address, user, self.write_to_log)  # Create handler
+    def createHandler(self, client_socket: socket.socket, client_address, user: User, f: Fernet) -> None:
+        """Creating new ClientHandler to handle client requests
+
+        Args:
+            client_socket (socket.socket): client socket object
+            client_address (_type_): client address
+            user (User): user object containing client data
+            f (Fernet): Fernet object to handle Encryption and Decryption. 
+        """        
+        client_handler: CClientHandler = CClientHandler(client_socket, client_address, user, f,  self.write_to_log)  # Create handler
         self.clientHandlers.append(client_handler)  # Add to handler list
         client_handler.start()  # Start handler thread
     
@@ -126,6 +169,9 @@ class CServerBL():
         print(msg)
         if self.logger_box:
             self.logger_box.insert("end",f"{msg}\n")
+
+
+
 class CClientHandler(threading.Thread):
     """
     A client handler class that manages individual client connections in separate threads.
@@ -141,13 +187,14 @@ class CClientHandler(threading.Thread):
         run(): Main thread execution method that handles client communication
         disconnect(): Closes client connection and cleanup
         __repr__(): String representation of the client handler
+        get_message(): Getting Encryption message from client and doing Decryption.
+        send_message(): Sending Encryption message to client
     Args:
         client_socket (socket.socket): Socket object for client connection
         client_address (Tuple[str,int]): Client's address information
-        table_callback (Callable): Function to manage client table updates
     """
     
-    def __init__(self, client_socket: socket.socket, client_address, user: User, write_to_log) -> None:
+    def __init__(self, client_socket: socket.socket, client_address, user: User, f: Fernet, write_to_log) -> None:
         super().__init__()
         self.client: socket.socket | None= client_socket
         self.address: Tuple[str,int]  = client_address
@@ -155,6 +202,7 @@ class CClientHandler(threading.Thread):
         self.user: User = user
         self.daemon = True
         self.write_to_log = write_to_log
+        self.f: fernet.Fernet = f
 
         if not os.path.exists("./StorageFiles"):
             os.mkdir("./StorageFiles")
@@ -162,30 +210,38 @@ class CClientHandler(threading.Thread):
     def run(self) -> None:
         # Server functionality here
         self.write_to_log(f"[CClientBl] {threading.active_count() - 1} Are currently connected!")
-        while self.connected and self.client is not None:
+        while True:
             try:
-                if  self.client.recv(4, socket.MSG_PEEK) == b"!DIS":
+
+                message: str | None = self.get_message()
+                if message:
+                    payload = json.loads(message)
+                    response: dict[str, Any] | None = handle_client_request(payload,self.client,self.user)
+                    print(response)
+                    if response:
+                        self.send_message(response)
+                else:
                     break
-                message_len_bytes: bytes = self.client.recv(8)
-                if message_len_bytes == b"":
-                    break
-                message_len: int = struct.unpack("!Q",message_len_bytes)[0]
-                
-                payload: dict[str, Any] = json.loads(self.client.recv(message_len).decode())
-                response: dict[str, Any] = handle_client_request(payload,self.client,self.user) # Handle client request
-                self.write_to_log(f"{response =}")
-                if response:
-                    response_bytes: bytes = json.dumps(response).encode()
-                    self.client.send(struct.pack("!Q",len(response_bytes)) + response_bytes)
             except ConnectionResetError:
-                self.write_to_log("client was forced closed!")
-                #self.write_to_log(f"[CServerBL] -> [ClientHandler] Exception at run(): {e}")
+                self.write_to_log("[ClientHandler -> run()] client was forced closed!")
                 break
             except ConnectionAbortedError:
-                self.write_to_log("client connection Aborted!")
+                self.write_to_log("ClientHandler -> run()] client connection Aborted!")
                 break
+            
         self.disconnect()
-        
+
+    def get_message(self) -> str | None:
+        len_encrypted_bytes = self.client.recv(8)
+        if len_encrypted_bytes == b'': # if client disconnects the recv() returns b'' (empty bytes)
+            return None
+        encrypted  =self.client.recv(struct.unpack("!Q",len_encrypted_bytes)[0])
+        return self.f.decrypt(encrypted).decode()
+    
+    def send_message(self, data: dict[str,Any]):
+        encrypted_data = self.f.encrypt(json.dumps(data).encode())
+        self.client.send(struct.pack("!Q",len(encrypted_data)) + encrypted_data)
+    
     def disconnect(self) -> None:
         self.write_to_log(f"[SERVER-BL] {self} disconnected")
         self.connected = False
@@ -193,9 +249,10 @@ class CClientHandler(threading.Thread):
             self.client.close()
         self.client = None
         del self
-        
-    def __repr__(self) -> str:
-        return f"<ClientHandler({self.address=}, \n{self.client=})>"
+     
+    def __repr__(self) -> str: return f"<ClientHandler({self.address=}, \n{self.client=})>"
+
+
 if __name__ == "__main__":
     try:
         print("Press Ctrl + C to exit.")

@@ -1,8 +1,3 @@
-
-
-from models import File
-
-
 try:
     from socket import socket
     from typing import Any
@@ -19,20 +14,19 @@ try:
     from models import File, User
     import os
     from cryptography.fernet import Fernet
-    import zipfile
-    import io
 except ModuleNotFoundError:
     raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
+
+
+CHUNK_SIZE = 1024 *256 # 256 KB
 
 def username_exists(username: str, db: Session | None = None) -> bool: 
     if db is None:
         db = SessionLocal()
     result: bool = db.query(User).filter(User.username == username).first() is not None
     return result
-
 @overload
 def getUser(login: int) -> User | None: ...
-
 @overload
 def getUser(login: Dict[str,Any]) -> User | None: ...
 
@@ -133,53 +127,29 @@ def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dic
     Returns:
         dict[str,Any]: status response from server to client
     """    
-
-    file_size: int = payload["filesize"]
-    file_bytes = b""
+    file_id = str(uuid7())
     received: int = 0
     try:
+        file_size: int = payload["filesize"]
         chunk_size = 256 * 1024
-        while received < file_size:
-            chunk: bytes = client.recv(chunk_size)
-            if not chunk:
-                break
-            file_bytes += chunk
-            received += len(chunk)
-    except BrokenPipeError:
+        with open(f"./StorageFiles/{file_id}.bin","wb") as f:
+            while received < file_size:
+                chunk: bytes = client.recv(chunk_size)
+                if not chunk:
+                    raise ConnectionResetError()
+                f.write(chunk)
+                received += len(chunk)
+    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError) as e:
+        print(e)
+        os.remove(f"./StorageFiles/{file_id}.bin")
         return None
-    except ConnectionResetError:
-        return None
-    
-    return EncryptAndZip(file_bytes,payload,user)
-
-
-def EncryptAndZip(file: bytes, payload:dict[str,Any], user: User):
-    with open("key.key","rb") as k:
-        key = k.read()
-    fernet = Fernet(key)
-
-
-    encrypted = fernet.encrypt(file)
-
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer,"w",zipfile.ZIP_DEFLATED) as zip_file:
-        zip_file.writestr(payload["filename"],file)
-    
-    # Get the resulting ZIP file content as a bytes object
-    zipped_bytes: bytes = zip_buffer.getvalue()
-
-    file_id = str(uuid7())
-    
-    with open(file_id+".zip", "wb") as f:
-        f.write(encrypted)
-    
     db = SessionLocal()
     user_in_session = db.merge(user)
     user_in_session.curr_storage += payload["filesize"]
     uploaded_file =  File(
             file_id=file_id,
             filename=payload["filename"],
-            filesize=payload["filesize"],
+            filesize=file_size,
             modified=int(datetime.now().timestamp()),
             user_id=user.user_id
         )
@@ -187,8 +157,6 @@ def EncryptAndZip(file: bytes, payload:dict[str,Any], user: User):
     db.commit()
     db.close()
     return {"status": True, "message": payload["filename"]+" Uploaded!","file_id":file_id}
-
-
 
 def DeleteFile(file_ids: list[str], user: User)-> dict[str, Any]:
     try:
@@ -207,13 +175,11 @@ def DeleteFile(file_ids: list[str], user: User)-> dict[str, Any]:
             user_in_session.curr_storage -= total_size
             db.commit()
         for file_id in file_ids:
-            os.remove(file_id+".zip")
+            os.remove(f"./StorageFiles/{file_id}.bin")
         return {"status": True, "message": "File(s) deleted!"}
     except Exception as e:
         print(e)
         return {"status": False, "message": "Couldn't delete this file."}
-
-
 
 def SendFile(client: socket.socket, file_id: str) -> None:
     """_summary_
@@ -225,37 +191,20 @@ def SendFile(client: socket.socket, file_id: str) -> None:
     Returns:
         dict[str, Any]: _description_
     """
-    with SessionLocal() as db:
-        file_name = db.query(File.filename).filter(File.file_id==file_id).one().tuple()[0]
-    with zipfile.ZipFile(file_id+".zip","r") as archive:
-        file_bytes = archive.read(file_name)
-    
-    with open("key.key", "rb") as k:
-        key = k.read()
-    fernet = Fernet(key)
-
-    decrypted_bytes= fernet.decrypt(file_bytes)
-    file_len = len(decrypted_bytes)
-    chunk_size= 1024 * 256
-    sent = 0
-    while chunk:= decrypted_bytes[sent:sent+chunk_size]:
-        if not chunk:
-            break
-        try:
-            client.sendall(chunk)
-            sent += len(chunk)
-        except (ConnectionAbortedError, ConnectionResetError):
-            return
+    global CHUNK_SIZE
+    try:
+        with open(f"./StorageFiles/{file_id}.bin","rb") as f:
+            while chunk  := f.read(CHUNK_SIZE):
+                client.sendall(chunk)
+    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+        pass
     return None
-
-
-
 
 def createLink(file_id: str)-> dict[str, Any]:
     try:
         with SessionLocal() as db:
             file: File = db.query(File).filter(File.file_id == file_id).one()
-            return {"status": True,"message": "Share link created!", "link": ""}
+        return {"status": True,"message": "Share link created!", "link": ""}
     except:
         return {"status": False,"message": "Couldn't Create share link."}
 
@@ -277,7 +226,7 @@ def handle_client_request(payload: dict[str, Any], client: socket.socket, user: 
         case "delete":
             response = DeleteFile(payload["ids"], user)
         case "save":
-            response = SendFile(client,payload["filename"])
+            response = SendFile(client,payload["file_id"])
         case "createLink":
             response = createLink(payload["file_id"])
         case _:
