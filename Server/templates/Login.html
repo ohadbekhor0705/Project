@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %} Login {% endblock %}
+
+{% block content %}
+
+
+
+{% if not current_user.is_authenticated %}
+<h1>Login</h1>
+<p>Please enter your credentials to log in.</p>
+<div id="response">
+</div>
+<form id="form">  
+    <div class="mb-3">
+        <label for="username" class="form-label">Username</label>
+        <input type="text" class="form-control" id="username" name="username" >
+    </div>
+    <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <input type="password" class="form-control" id="password" name="password" >
+    </div>
+    <button type="submit" class="btn btn-info" id="submit">Register</button >
+</form>
+
+
+
+
+<script>
+
+// code from https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+document.addEventListener("DOMContentLoaded", function () {
+    const response_box = document.getElementBy("response");
+    const form = document.getElementById("form");
+    const submit_button = getElementById("submit")
+    if (form) {
+        form.addEventListener("submit", async function (e) {
+            e.preventDefault();
+
+            // 1. Correctly initialize FormData
+            const formData = new FormData(e.target);
+            
+            // 2. Convert FormData to a plain JavaScript object for JSON serialization
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch("/handle_login", {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    // 4. Stringify the object to send as JSON
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    window.location.href = "{{ url_for('Browse') }}";
+                } else if (response.status === 401) {
+                    const response_json = await response.json();
+                    
+                    response_box.innerText = response_json.message;
+                    response_box.className = "alert alert-danger";
+                } else {
+                    // Handle other errors
+                    console.error('Unexpected status:', response.status);
+                }
+            } catch (error) {
+                console.error("Fetch error:", error);
+            }
+        });
+    }
+});
+</script>
+
+
+
+<p>If you don't have an account, you can <a href="{{ url_for('Register') }}">register here</a>.</p>
+
+
+{% else %}
+    <h1>You are already logged in as {{ current_user.username }}.</h1>
+
+{% endif %}
+{% endblock %}

@@ -4,7 +4,7 @@ from typing import Tuple,BinaryIO
 import json
 import struct
 import os
-from typing import Any
+from typing import Any, overload
 from customtkinter import CTkProgressBar, CTkLabel
 from datetime import datetime
 from tkinter.ttk import Treeview
@@ -12,13 +12,16 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography import fernet
 import base64
+import threading
+CHUNK_SIZE = 1024 * 256
+FORMAT = "!I"
 class CClientBL():
     def __init__(self) -> None:
         self.ADDR = ("127.0.0.1", 9999)
-        self.connected: bool = False
+        
         self.client: socket.socket | None = None
         self.user = {}
-        
+        self.Event = threading.Event()
         self.public_key: bytes
         self.session_key: bytes
         self.fernet: fernet.Fernet
@@ -27,8 +30,7 @@ class CClientBL():
         self.max_storage: int = 0
         self.files: list[dict[str,Any]] = []
         self.username: str = ""
-
-        
+     
     def connect(self, username: str, password: str, cmd: str) -> Tuple[dict[str,Any], socket.socket | None]:
         """
         Establishes a connection to the server and sends authentication credentials.
@@ -49,13 +51,13 @@ class CClientBL():
             Logs connection status and responses
             Returns server message and socket if successful
         """
-        
+        global FORMAT
         try:
             _client_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
             _client_socket.connect(self.ADDR)
             # Receiving public key from server
-            key_len_recv = _client_socket.recv(8)
-            len_pem_public: int = struct.unpack("!Q",key_len_recv)[0]
+            key_len_recv = _client_socket.recv(4)
+            len_pem_public: int = struct.unpack(FORMAT,key_len_recv)[0]
 
             pem_public = _client_socket.recv(len_pem_public)
             self.public_key = server_public_key = serialization.load_pem_public_key(pem_public) # Loading public key
@@ -63,7 +65,7 @@ class CClientBL():
             raw_session_key = os.urandom(32)
             self.session_key = base64.urlsafe_b64encode(raw_session_key)
             encrypted_session_key = server_public_key.encrypt(self.session_key,padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
-            _client_socket.send(struct.pack("!Q",len(encrypted_session_key)) + encrypted_session_key) #sending session key
+            _client_socket.send(struct.pack(FORMAT,len(encrypted_session_key)) + encrypted_session_key) #sending session key
 
             self.fernet = fernet.Fernet(self.session_key)
 
@@ -74,52 +76,54 @@ class CClientBL():
                     "cmd": cmd
             }
             encrypted_auth = self.fernet.encrypt(json.dumps(auth).encode())
-            _client_socket.send(struct.pack("!Q",len(encrypted_auth)) +  encrypted_auth)
+            _client_socket.send(struct.pack(FORMAT,len(encrypted_auth)) +  encrypted_auth)
             # getting authentication response:
-            response_length: bytes = _client_socket.recv(8)
-            response_bytes_encrypted: bytes = _client_socket.recv(struct.unpack("!Q",response_length)[0])
+            response_length: bytes = _client_socket.recv(4)
+            response_bytes_encrypted: bytes = _client_socket.recv(struct.unpack(FORMAT,response_length)[0])
             response: dict[str, Any] = json.loads(self.fernet.decrypt(response_bytes_encrypted).decode())
-            print(response)
             if response["status"] == True:
+                self.Event.set() # setting the flag to True.
                 self.user = response["user"]
-                self.connected = True
                 self.files = response["files"]
                 self.username = auth["username"]
-                self.current_storage = response["user"]["curr_storage"]
-                self.max_storage = response["user"]["max_storage"]
+                self.current_storage = response["user"]["curr_storage"] / (1024**2)
+                self.max_storage = response["user"]["max_storage"] / (1024**2)
                 return response, _client_socket
             else:
                 return response, None
         except ConnectionRefusedError:
             return {"message": "The server isn't running. Please Try Again Later."},None
     
+    
     def sendfile(self,file: BinaryIO, command: str,progress_bar: CTkProgressBar, files_table: Treeview, title: CTkLabel) -> None:
-        file_size: int = os.path.getsize(file.name)
-        if file_size + self.current_storage  > self.max_storage:
+        global FORMAT
+        file_size: int = os.path.getsize(file.name) # file size in bytes.
+        # if user doesn't have storage then display appropriate message
+        if file_size/(1024**2) + self.current_storage  > self.max_storage:
             title.configure(text= "You're out of storage!")
             return
         payload: dict[str, Any] = {
             "cmd": command,
             "filename":  file.name.split("/")[-1],
             "filesize": file_size,
-        } 
+        }
         self.send_message(payload)
-        sent: int = 0
-        chunk_size = 256 * 1024
-        while chunk := file.read(chunk_size):
-            self.client.sendall(chunk)
-            sent += chunk_size
-            progress_bar.set(sent/file_size)
-        response: dict[str, Any] = self.get_message()
-        print(f"[CClientBl] received from server: {response}")
+
+        while chunk := file.read(CHUNK_SIZE):
+            encrypted_chunk = self.fernet.encrypt(chunk)
+            self.client.send(struct.pack(FORMAT, len(encrypted_chunk)))
+            self.client.sendall(encrypted_chunk)
+        self.client.sendall(struct.pack(FORMAT, 0))
+
+        response = self.get_message()
         if response["status"]:
-            self.files.append({"file_id": response["file_id"] ,"filename": payload["filename"], "filesize": file_size})
+            self.files.append({"file_id": response["file_id"] ,"filename": payload["filename"], "filesize": file_size / (1024**2)})
             self.current_storage += file_size
             progress_bar.set(0)
             dateTime: datetime = datetime.now().strftime("%Y-%m-%d")
-            files_table.insert("","end", values= (response["file_id"],file.name.split("/")[-1], str(round(file_size/1048576,2))+" MB",dateTime))
+            files_table.insert("","end", values= (response["file_id"],file.name.split("/")[-1], str(round(file_size,2))+" bytes",dateTime))
             title.configure(text=f"{response["message"]}")
-            print(response["message"])
+    
     def delete_files(self,file_ids: list[str], files_table: Treeview, selected_rows: tuple[str,...], title: CTkLabel) -> None:
         payload = {
             "cmd": "delete",
@@ -128,36 +132,49 @@ class CClientBL():
         self.send_message(payload)
         response = self.get_message()
         title.configure(text=response["message"])
+        updated: int = 0
         if response["status"]:
             files_table.delete(*selected_rows)
-        
 
     def ReceiveFile(self,progress_bar: CTkProgressBar, file_id:str, filename:str, file_size: int):
 
-        received = 0
-        print(file_size)
-        self.send_message({"cmd": "save","file_id": file_id,"filename":filename})
         
-        chunk_size = 1024 *256
-        written: int = 0
+        self.send_message({"cmd": "save","file_id": file_id,"filename":filename})
+        received = 0
+        HEADER_SIZE = struct.calcsize(FORMAT)
+        # Get encrypted file size:
+        encrypted_filesize: int = self.get_message()["encrypted_size"]
+        print(f"new size: {encrypted_filesize}")
         if not os.path.exists("./saved_files"):
             os.mkdir("saved_files")
         with open(f"saved_files/{filename}","wb") as saved_file:
-            while received < file_size:
-                chunk = self.client.recv(256 * 1024)
-                received += len(chunk)
-                saved_file.write(chunk)
-                progress_bar.set(received/file_size)
-            
-    def send_message(self, payload: dict[str,Any]) -> None:
+            while True:
+                chunk_len = self.client.recv(HEADER_SIZE)
+                if chunk_len == 0: # if we got EOF then break:
+                    break
+                header = struct.unpack(FORMAT, chunk_len)[0] # get header
+
+                encrypted_chunk = self.client.recv(header)
+                saved_file.write(self.fernet.decrypt(encrypted_chunk))
+    @overload
+    def send_message(self, payload: str): ...
+    @overload 
+    def send_message(self, payload: dict[str, Any]): ...
+    
+    def send_message(self, payload: dict[str,Any] | str) -> None:
         """sending Encrypted message to server
 
         Args:
-            payload (dict[str,Any]): payload to send.
-        """        
-        encoded_json: bytes = json.dumps(payload).encode()
-        encrypted = self.fernet.encrypt(encoded_json)
-        self.client.send(struct.pack("!Q",len(encrypted))+ encrypted)
+            payload (dict[str,Any] | str): payload to send.
+        """ 
+        if isinstance(payload, str):
+            encrypted = self.fernet.encrypt(payload.encode())
+            Header = struct.pack(FORMAT,len(encrypted))
+            self.client.send(Header + encrypted)
+        if isinstance(payload, dict):    
+            encrypted = self.fernet.encrypt(json.dumps(payload).encode())
+            Header = struct.pack(FORMAT,len(encrypted))
+            self.client.send(Header + encrypted)
 
     def get_message(self) -> dict[str, Any]:
         """Receiving response frm server
@@ -165,8 +182,14 @@ class CClientBL():
         Returns:
             dict[str, Any]: message from server.
         """ 
-        len_bytes: bytes = self.client.recv(8)
-        encrypted_payload = self.client.recv(struct.unpack("!Q",len_bytes)[0])
+        len_bytes: bytes = self.client.recv(4)
+        encrypted_payload = self.client.recv(struct.unpack(FORMAT,len_bytes)[0])
         
         return json.loads(self.fernet.decrypt(encrypted_payload).decode())
     
+
+if __name__ == "__main__":
+    Client = CClientBL()
+    res, Client.client = Client.connect("ohad","ohad","login")
+    if Client.Event.is_set():
+        Client.send_message({ "message": "Hello!!"})

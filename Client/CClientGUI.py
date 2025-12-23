@@ -10,8 +10,7 @@ try:
     import json
     import os
     import datetime
-    from tkfontawesome import icon_to_image
-    from PIL import ImageTk, Image
+    from time import sleep
 except ModuleNotFoundError:
     print("please run command on the terminal: pip install -r requirements.txt")
     quit()
@@ -21,7 +20,7 @@ class CClientGUI(CClientBL):
         super().__init__()
         # Load a custom color theme file for customtkinter. This points to the bundled theme JSON.
         # If the path is wrong the library will fall back to defaults, so keep the file with the project.
-        Ctk.set_default_color_theme("./themes/orange.json")
+        Ctk.set_default_color_theme("./themes/rime.json")
         Ctk.set_appearance_mode("Dark")
         self.master = Ctk.CTk()
         self.FONT: tuple[str, int] = ("Roboto",17.8)
@@ -41,8 +40,6 @@ class CClientGUI(CClientBL):
         self._search_button = None  
         self.progress_bar = None
         self.response_title = None  
-
-
         self.tabview = Ctk.CTkTabview(self.master)
         self.login_tab: CTkFrame   = self.tabview.add("Login")
         self.height, self.width = 750, 1500
@@ -68,12 +65,9 @@ class CClientGUI(CClientBL):
         # Progress Bar
         self.progress_bar = Ctk.CTkProgressBar(
             self.storage_tab,
-            corner_radius=20,
+            corner_radius=10,
             border_width=2,
             orientation="horizontal",
-            border_color="#FF8C42",
-            fg_color="#FF8C42",
-            progress_color="#AF6131",
             mode="determinate",
             determinate_speed=5,
             indeterminate_speed=0.5
@@ -178,6 +172,75 @@ class CClientGUI(CClientBL):
         self.info_label.pack(side="bottom", pady=10)
         # Pre-fill username/password if "Remember me"
         self.remember_action(self.GET)
+    
+    def create_UserDataTab(self) -> None:
+        """
+        Populates self.usertab with user information and storage usage.
+        Assumes self.usertab is an existing CTkFrame (tab).
+        """
+
+        # Title
+        title_label = Ctk.CTkLabel(
+            self.usertab,
+            text="User Information",
+            font=self.TITLE_FONT if hasattr(self, "TITLE_FONT") else self.FONT
+        )
+        title_label.pack(pady=(20, 10))
+
+        # Username
+        username_label = Ctk.CTkLabel(
+            self.usertab,
+            text=f"Username: {self.username}",
+            font=self.FONT,
+            anchor="w"
+        )
+        username_label.pack(fill="x", padx=30, pady=5)
+
+        # Storage text
+        storage_label = Ctk.CTkLabel(
+            self.usertab,
+            text=f"Storage: {self.current_storage} MB / {self.max_storage} MB",
+            font=self.FONT,
+            anchor="w"
+        )
+        storage_label.pack(fill="x", padx=30, pady=5)
+
+        # Progress calculation
+        progress = (
+            min(self.current_storage / self.max_storage, 1.0)
+            if self.max_storage > 0 else 0
+        )
+
+        # Progress bar
+        storage_bar = Ctk.CTkProgressBar(
+            self.usertab,
+            height=18,
+            corner_radius=10
+        )
+        storage_bar.set(progress)
+        storage_bar.pack(fill="x", padx=30, pady=(10, 5))
+
+        # Percentage label
+        percent_label = Ctk.CTkLabel(
+            self.usertab,
+            text=f"{progress * 100:.1f}% used",
+            font=self.FONT
+        )
+        percent_label.pack(pady=(0, 30))
+
+        # Logout button
+        logout_button = Ctk.CTkButton(
+            self.usertab,
+            text="Logout 🚪",
+            font=self.FONT,
+            fg_color="#C0392B",        
+            hover_color="#A93226",     
+            text_color="white",
+            corner_radius=12,
+            command=self.logout
+        )
+        logout_button.pack(pady=(10, 25))
+
 
     def run(self) -> None: self.master.mainloop()
     
@@ -198,6 +261,8 @@ class CClientGUI(CClientBL):
             # Create Storage Frame:
             self.storage_tab: CTkFrame   = self.tabview.add("Storage")
             self.create_StorageFrame()
+            self.usertab: CTkFrame = self.tabview.add("UserData")
+            self.create_UserDataTab()
             self.tabview.set("Storage")
             self.response_title.configure(text = response["message"])
             for file in response["files"]:
@@ -208,7 +273,8 @@ class CClientGUI(CClientBL):
                 # Output can also be formatted as a string (e.g., YYYY-MM-DD)
                 formatted_date = date_obj.strftime("%Y-%m-%d")
                 self.files_table.insert("","end",values= (file["file_id"],file["filename"],str(round(file["filesize"]/1048576,2))+" MB",formatted_date))
-           # threading.Thread(target=self.check_connection).start()
+            threading.Thread(target=self.check_connection, daemon=True).start()
+
         else:
             self._loginButton.configure(state=Ctk.NORMAL)
             self._registerButton.configure(state=Ctk.NORMAL)
@@ -270,6 +336,8 @@ class CClientGUI(CClientBL):
     def save_file(self):
         if self.operation_thread and self.operation_thread.is_alive():
             return 
+        if not self.files_table.selection:
+            return
         selected_row = self.files_table.selection()[0]
         values: list[str] = self.files_table.item(selected_row)["values"]
         file_id, filename, file_size, _ = values
@@ -280,26 +348,48 @@ class CClientGUI(CClientBL):
     def on_click_delete(self) -> None:
         if self.operation_thread and self.operation_thread.is_alive():
             return 
-        selected_rows = self.files_table.selection()
-        selected_files = [self.files_table.item(row)["values"][0] for row in selected_rows]
+        if not self.files_table.selection():
+            return
+        # Trying to get selected rows and stop if no rows were selected:
+        selected_rows: tuple[str, ...]= self.files_table.selection()
+        
+        selected_files = [ self.files_table.item(row)["values"][0] for row in selected_rows]
         self.operation_thread = threading.Thread(target=self.delete_files,args=(selected_files, self.files_table,selected_rows,self.response_title))
         self.operation_thread.start()
-
+    
     def logout(self) -> None:
-        self.connected = False
+        self.Event.clear() # clearing the event flag
         if self.client:
-            self.client.send(b"!DIS")
+            self.send_message("!DIS")
             self.client.close()
         self.client = None
         self.files_table.delete(*self.files_table.get_children()) # get all rows and extract them in the function
         self.tabview.delete("Storage")
+        self.tabview.delete("UserData")
         self.tabview.set("Login")
-        self.remember_action(self.GET)
+        self._messageBox.configure(text="")
+        self._loginButton.configure(state=Ctk.ACTIVE)
+        self._registerButton.configure(state=Ctk.ACTIVE)
+        self.username = ""
+        self.max_storage = 0
+        self.current_storage = 0
+    
+    def check_connection(self) ->None:
+        while self.Event.is_set():
+            try:
+                self.client.send(b'')
+            except OSError:
+                self.client = None
+                self.logout()
+                break
+            sleep(2)
+                
 
 if __name__ == "__main__":
     try:
         print("Press Ctrl + C to exit.")
         App = CClientGUI()
         App.run()
+        exit()
     except KeyboardInterrupt: # Ctrl + C
         exit()

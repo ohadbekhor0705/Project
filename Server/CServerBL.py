@@ -22,6 +22,7 @@ try:
     from cryptography import fernet
     from cryptography.hazmat.primitives.asymmetric import padding
     from cryptography.hazmat.primitives import hashes
+    
 
 except ModuleNotFoundError:
     raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
@@ -52,6 +53,7 @@ class CServerBL():
 
     # Start the server
     def start_server(self) ->  None:
+        FORMAT = "!I"
         """
         Start the TCP server and enter the accept loop.
         Initializes and binds a TCP socket to self._ip and self._port, sets self.event,
@@ -68,11 +70,12 @@ class CServerBL():
             self.write_to_log(f"[SERVER] is running at \nIP: {socket.gethostbyname(socket.gethostname())} \nPORT: {self._port}")
             while self.event.is_set() and self.server_socket is not None:  # Main accept loop
                 client, address = self.server_socket.accept()  # Accept new client
-                client.send(struct.pack("!Q",len(self.pem_public)) + self.pem_public) # Sending public key to client
+                header = struct.pack(FORMAT, len(self.pem_public))
+                client.send(header + self.pem_public) # Sending public key to client
                 
 
-                encrypted_session_key_len_bytes = client.recv(8)
-                encrypted_session_key = client.recv(struct.unpack("!Q",encrypted_session_key_len_bytes)[0])
+                encrypted_session_key_len_bytes = client.recv(4)
+                encrypted_session_key = client.recv(struct.unpack(FORMAT,encrypted_session_key_len_bytes)[0])
                 session_key = self.private_key.decrypt(
                     encrypted_session_key,
                     padding.OAEP(
@@ -85,8 +88,8 @@ class CServerBL():
                 f = fernet.Fernet(session_key)
                 self.write_to_log(client)
                 # getting payload from client
-                payload_length_bytes: bytes = client.recv(8) 
-                payload_bytes: bytes = f.decrypt(client.recv(struct.unpack("!Q",payload_length_bytes)[0])).decode()
+                payload_length_bytes: bytes = client.recv(4) 
+                payload_bytes: bytes = f.decrypt(client.recv(struct.unpack(FORMAT,payload_length_bytes)[0])).decode()
                 payload: dict = json.loads(payload_bytes.encode())
                 self.write_to_log(f"[CClientBL] Authentication payload received: {payload}")
             
@@ -101,7 +104,6 @@ class CServerBL():
                         response = {"status": True, "message": f"Welcome back, {payload['username']}", "user": _user.toDict()}
                         uid: int = _user.user_id
                         files: list[dict[str, Any]] = files_by_id(uid)
-                        print(f"{files=}")
                         response["files"] = files
                     else:
                         response = {"status": False, "message": "Username or password are Invalid!"}
@@ -118,7 +120,7 @@ class CServerBL():
                 
                 # Send response to client 
                 encrypted_response = f.encrypt(json.dumps(response).encode())
-                client.send(struct.pack("!Q",len(encrypted_response)) + encrypted_response)
+                client.send(struct.pack(FORMAT,len(encrypted_response)) + encrypted_response)
         except OSError as e:
             pass  # Ignore OS errors
         #except Exception as e:
@@ -149,7 +151,7 @@ class CServerBL():
         except Exception as e:
             self.write_to_log(f"[ServerBL] Exception at stop_server(): {e}")  # Log exceptions
 
-    def createHandler(self, client_socket: socket.socket, client_address, user: User, f: Fernet) -> None:
+    def createHandler(self, client_socket: socket.socket, client_address, user: User, f: fernet.Fernet) -> None:
         """Creating new ClientHandler to handle client requests
 
         Args:
@@ -166,11 +168,8 @@ class CServerBL():
         return f"<Server(ip={self._ip}, port={self._port}, flag={self.event.is_set()}, {self.server_socket})>"
 
     def write_to_log(self, msg: Any) -> None:
-        print(msg)
         if self.logger_box:
             self.logger_box.insert("end",f"{msg}\n")
-
-
 
 class CClientHandler(threading.Thread):
     """
@@ -194,10 +193,11 @@ class CClientHandler(threading.Thread):
         client_address (Tuple[str,int]): Client's address information
     """
     
-    def __init__(self, client_socket: socket.socket, client_address, user: User, f: Fernet, write_to_log) -> None:
+    def __init__(self, client_socket: socket.socket, client_address, user: User, f: fernet.Fernet, write_to_log) -> None:
         super().__init__()
         self.client: socket.socket | None= client_socket
         self.address: Tuple[str,int]  = client_address
+        self.client: socket.socket = client_socket
         self.connected = True
         self.user: User = user
         self.daemon = True
@@ -210,14 +210,19 @@ class CClientHandler(threading.Thread):
     def run(self) -> None:
         # Server functionality here
         self.write_to_log(f"[CClientBl] {threading.active_count() - 1} Are currently connected!")
+        iter = 1
         while True:
+            print(f"{iter=}")
+            iter+=1
             try:
 
                 message: str | None = self.get_message()
+                
                 if message:
-                    payload = json.loads(message)
-                    response: dict[str, Any] | None = handle_client_request(payload,self.client,self.user)
-                    print(response)
+                    if message == "!DIS":
+                        break
+                    payload: dict[str, Any] = json.loads(message)
+                    response: dict[str, Any] | None = handle_client_request(payload,self)
                     if response:
                         self.send_message(response)
                 else:
@@ -228,19 +233,19 @@ class CClientHandler(threading.Thread):
             except ConnectionAbortedError:
                 self.write_to_log("ClientHandler -> run()] client connection Aborted!")
                 break
+           
             
         self.disconnect()
 
     def get_message(self) -> str | None:
-        len_encrypted_bytes = self.client.recv(8)
-        if len_encrypted_bytes == b'': # if client disconnects the recv() returns b'' (empty bytes)
-            return None
-        encrypted  =self.client.recv(struct.unpack("!Q",len_encrypted_bytes)[0])
-        return self.f.decrypt(encrypted).decode()
+        header = self.client.recv(4)
+        message_length: int = struct.unpack("!I",header)[0]
+        encrypted  =self.client.recv(message_length)
+        return self.f.decrypt(encrypted).decode() # the error is here
     
     def send_message(self, data: dict[str,Any]):
         encrypted_data = self.f.encrypt(json.dumps(data).encode())
-        self.client.send(struct.pack("!Q",len(encrypted_data)) + encrypted_data)
+        self.client.send(struct.pack("!I",len(encrypted_data)) + encrypted_data)
     
     def disconnect(self) -> None:
         self.write_to_log(f"[SERVER-BL] {self} disconnected")
@@ -250,15 +255,9 @@ class CClientHandler(threading.Thread):
         self.client = None
         del self
      
-    def __repr__(self) -> str: return f"<ClientHandler({self.address=}, \n{self.client=})>"
-
+    def __repr__(self) -> str: return f"<ClientHandler({self.address=}, {socket.gethostbyaddr(self.address[0])}>"
 
 if __name__ == "__main__":
-    try:
         print("Press Ctrl + C to exit.")
         server = CServerBL()
         server.start_server()
-    except KeyboardInterrupt:
-        print("closing program")
-        server.stop_server()
-        quit()

@@ -21,7 +21,7 @@ except ModuleNotFoundError:
 # -------------------------
 Base = declarative_base()
 
-class User(Base, UserMixin): # Класс Дла 
+class User(Base, UserMixin):
     """
     ORM model for a user in the system.
 
@@ -58,7 +58,7 @@ class User(Base, UserMixin): # Класс Дла
             "tries":self.tries
         }
 
-class File(Base): # Класс Дла клиент
+class File(Base):
     """
     ORM model for a file uploaded by a user.
 
@@ -76,6 +76,7 @@ class File(Base): # Класс Дла клиент
     filename: Column[str] = Column(String(255), nullable=False)
     filesize: Column[int] = Column(Integer, nullable=False)
     modified: Column[int] = Column(Integer, nullable=False)
+    chunks: Column[int] = Column(Integer, nullable=False)
     user_id: Column[int] = Column(Integer, ForeignKey("users.user_id"))
 
     user = relationship("User", back_populates="files")

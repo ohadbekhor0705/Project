@@ -1,24 +1,24 @@
+import socket
+import struct
+from shutil import rmtree
 try:
-    from socket import socket
     from typing import Any
     from sqlalchemy.orm.session import Session
     from sqlalchemy import and_, func, select
-    import cryptography
-    import logging
     from typing import Dict, Any, overload
     import bcrypt
-    import socket
     from models import User, File, SessionLocal
     from datetime import datetime
     from uuid6 import uuid7
     from models import File, User
     import os
-    from cryptography.fernet import Fernet
 except ModuleNotFoundError:
     raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
 
-
+FORMAT = "!I"
 CHUNK_SIZE = 1024 *256 # 256 KB
+
+
 
 def username_exists(username: str, db: Session | None = None) -> bool: 
     if db is None:
@@ -116,7 +116,7 @@ def files_by_id(uid: int) -> list[dict[str,Any]]:
             return []
         return [ {"file_id": f.file_id ,"filename": f.filename, "filesize": f.filesize, "modified": f.modified} for f in files]
 
-def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dict[str,Any] | None:
+def UploadFile(payload: dict[str, Any], ClientHandler) -> dict[str,Any] | None:
     """Uploading a file
 
     Args:
@@ -126,39 +126,103 @@ def UploadFile(payload: dict[str, Any],client: socket.socket ,user: User) -> dic
 
     Returns:
         dict[str,Any]: status response from server to client
-    """    
+    """
+    fernet = ClientHandler.f
+    client: socket.socket = ClientHandler.client
     file_id = str(uuid7())
-    received: int = 0
+    file_size = payload["filesize"]
+    HEADER_SIZE = struct.calcsize(FORMAT) # Ensure FORMAT matches (e.g., "!I")
+    received_unencrypted_bytes = 0
+    
+    chunks: int = 1 # how many chunks does the file have
+    save_path = f"./StorageFiles/{file_id}"
     try:
-        file_size: int = payload["filesize"]
-        chunk_size = 256 * 1024
-        with open(f"./StorageFiles/{file_id}.bin","wb") as f:
-            while received < file_size:
-                chunk: bytes = client.recv(chunk_size)
-                if not chunk:
-                    raise ConnectionResetError()
-                f.write(chunk)
-                received += len(chunk)
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+        while True:
+            #  Read the length of the ENCRYPTED chunk
+            header_data = client.recv(HEADER_SIZE) or struct.pack(FORMAT,0)
+            chunk_len = struct.unpack(FORMAT, header_data)[0]
+            #  Check for EOF (The 0 you sent at the end)
+            if chunk_len == 0:
+                break 
+            # 3. Read the encrypted block
+            encrypted_chunk =  client.recv(chunk_len)
+            print(f"{len(encrypted_chunk)=}")
+            print(encrypted_chunk if encrypted_chunk is not None else "None!")
+            # Write the encrypted chunk
+            with open(f"{save_path}/{chunks}.bin", "ab") as f: f.write(encrypted_chunk) 
+            chunks += 1
+        print(f"file file received from: {ClientHandler}")
+
+    
     except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError) as e:
         print(e)
-        os.remove(f"./StorageFiles/{file_id}.bin")
+        os.remove(f"./StorageFiles/{file_id}/{chunks}.bin")
         return None
+
     db = SessionLocal()
-    user_in_session = db.merge(user)
+    user_in_session: User = db.merge(ClientHandler.user)
     user_in_session.curr_storage += payload["filesize"]
     uploaded_file =  File(
             file_id=file_id,
             filename=payload["filename"],
             filesize=file_size,
             modified=int(datetime.now().timestamp()),
-            user_id=user.user_id
+            chunks=chunks,
+            user_id=ClientHandler.user.user_id
         )
     db.add(uploaded_file)
     db.commit()
     db.close()
     return {"status": True, "message": payload["filename"]+" Uploaded!","file_id":file_id}
 
-def DeleteFile(file_ids: list[str], user: User)-> dict[str, Any]:
+
+def SendFile(file_id: str, ClientHandler) -> None:
+    """_summary_
+
+    Args:
+        client (socket.socket): _description_
+        filename (str): _description_
+
+    Returns:
+        dict[str, Any]: _description_
+    """
+    global CHUNK_SIZE
+    client: socket.socket = ClientHandler.client
+    try:
+        file_names = get_file_names(f"C:/Storagefiles/{file_id}").sort(key=lambda s: int(s.split('.')[0]))
+        for file_name in file_names:
+           with open(f"./Storagefiles/{file_id}/{file_name}","rb") as f:
+               # 1. Read encrypted chunk
+                chunk = f.read()
+                if not chunk:
+                    # No more data: Send the '0' signal to stop the receiver
+                    client.sendall(struct.pack(FORMAT, 0))
+                    break
+                
+                # Get the size of this specific chunk
+                chunk_len = len(chunk)
+                # 4. Pack the length into 4 bytes
+                header = struct.pack(FORMAT, chunk_len)
+                # 5. Send [Length Header] + [The Actual Encrypted Bytes]
+                # Using sendall ensures the whole block is pushed to the buffer
+                client.sendall(header + chunk)
+
+
+    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+        pass
+    return None
+
+def DeleteFile(file_ids: list[str], ClientHandler)-> dict[str, Any]:
+    """Deleting files by file ids and updating current storage of user
+
+    Args:
+        file_ids (list[str]): A list of file ids.
+        user (User): User Object.
+    Returns:
+        dict[str, Any]: Response from server.
+    """    
     try:
         with SessionLocal() as db:
             # get the total size of all deleted files:
@@ -171,34 +235,16 @@ def DeleteFile(file_ids: list[str], user: User)-> dict[str, Any]:
             .filter(File.file_id.in_(file_ids))\
             .delete(synchronize_session=False)
             # attach user to the session
-            user_in_session = db.merge(user)
+            user_in_session = db.merge(ClientHandler.user)
             user_in_session.curr_storage -= total_size
             db.commit()
         for file_id in file_ids:
-            os.remove(f"./StorageFiles/{file_id}.bin")
-        return {"status": True, "message": "File(s) deleted!"}
+            rmtree(f"./StorageFiles/{file_id}")
+        return {"status": True, "message": f"{"Files" if len(file_ids) > 1 else "File"} deleted successfully"}
     except Exception as e:
         print(e)
-        return {"status": False, "message": "Couldn't delete this file."}
+        return {"status": False, "message": f"The server Couldn't delete this {"files" if len(file_ids) > 1 else "file"}."}
 
-def SendFile(client: socket.socket, file_id: str) -> None:
-    """_summary_
-
-    Args:
-        client (socket.socket): _description_
-        filename (str): _description_
-
-    Returns:
-        dict[str, Any]: _description_
-    """
-    global CHUNK_SIZE
-    try:
-        with open(f"./StorageFiles/{file_id}.bin","rb") as f:
-            while chunk  := f.read(CHUNK_SIZE):
-                client.sendall(chunk)
-    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
-        pass
-    return None
 
 def createLink(file_id: str)-> dict[str, Any]:
     try:
@@ -208,7 +254,13 @@ def createLink(file_id: str)-> dict[str, Any]:
     except:
         return {"status": False,"message": "Couldn't Create share link."}
 
-def handle_client_request(payload: dict[str, Any], client: socket.socket, user: User) -> dict[str, Any] | None:
+
+def get_file_names(directory: str) -> list[str]:
+    """Return a list of file names in the given directory (non-recursive)."""
+    with os.scandir(directory) as entries:
+        return [entry.name for entry in entries if entry.is_file()]
+
+def handle_client_request(payload: dict[str, Any],ClientHandler) -> dict[str, Any] | None:
     """Handling clients requests
 
     Args:
@@ -219,14 +271,14 @@ def handle_client_request(payload: dict[str, Any], client: socket.socket, user: 
     Returns:
         dict[str, Any] | None: Server Response.
     """    
-    response: dict[str, Any] = {}
+    response: dict[str, Any] | None = {}
     match payload["cmd"]:
         case "upload":
-            response = UploadFile(payload, client, user)
+            response = UploadFile(payload,ClientHandler)
         case "delete":
-            response = DeleteFile(payload["ids"], user)
+            response = DeleteFile(payload["ids"], ClientHandler)
         case "save":
-            response = SendFile(client,payload["file_id"])
+            response = SendFile(payload["file_id"], ClientHandler)
         case "createLink":
             response = createLink(payload["file_id"])
         case _:
