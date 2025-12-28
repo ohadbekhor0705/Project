@@ -143,22 +143,18 @@ def UploadFile(payload: dict[str, Any], ClientHandler) -> dict[str,Any] | None:
             #  Read the length of the ENCRYPTED chunk
             header_data = client.recv(HEADER_SIZE) or struct.pack(FORMAT,0)
             chunk_len = struct.unpack(FORMAT, header_data)[0]
-            #  Check for EOF (The 0 you sent at the end)
-            if chunk_len == 0:
+            if chunk_len == 0: #  Check for EOF (The 0 you sent at the end)
                 break 
-            # 3. Read the encrypted block
-            encrypted_chunk =  client.recv(chunk_len)
-            print(f"{len(encrypted_chunk)=}")
-            print(encrypted_chunk if encrypted_chunk is not None else "None!")
-            # Write the encrypted chunk
-            with open(f"{save_path}/{chunks}.bin", "ab") as f: f.write(encrypted_chunk) 
+            encrypted_chunk =  client.recv(chunk_len)# Read the encrypted block
+            with open(f"{save_path}/{chunks}.bin", "ab") as f: f.write(encrypted_chunk) # Write the encrypted chunk
             chunks += 1
         print(f"file file received from: {ClientHandler}")
 
     
     except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError) as e:
         print(e)
-        os.remove(f"./StorageFiles/{file_id}/{chunks}.bin")
+        try: os.remove(f"./StorageFiles/{file_id}/{chunks}.bin")
+        except FileNotFoundError: pass
         return None
 
     db = SessionLocal()
@@ -191,24 +187,15 @@ def SendFile(file_id: str, ClientHandler) -> None:
     global CHUNK_SIZE
     client: socket.socket = ClientHandler.client
     try:
-        file_names = get_file_names(f"C:/Storagefiles/{file_id}").sort(key=lambda s: int(s.split('.')[0]))
-        for file_name in file_names:
-           with open(f"./Storagefiles/{file_id}/{file_name}","rb") as f:
-               # 1. Read encrypted chunk
-                chunk = f.read()
-                if not chunk:
-                    # No more data: Send the '0' signal to stop the receiver
-                    client.sendall(struct.pack(FORMAT, 0))
-                    break
-                
-                # Get the size of this specific chunk
-                chunk_len = len(chunk)
-                # 4. Pack the length into 4 bytes
-                header = struct.pack(FORMAT, chunk_len)
-                # 5. Send [Length Header] + [The Actual Encrypted Bytes]
-                # Using sendall ensures the whole block is pushed to the buffer
-                client.sendall(header + chunk)
-
+        file_names = get_file_names(rf"C:Storagefiles/{file_id}")
+        for file_name in file_names:#Read encrypted chunk
+            with open(rf"./Storagefiles/{file_id}/{file_name}","rb") as f: chunk = f.read()
+            if not chunk:
+                client.sendall(struct.pack(FORMAT, 0))# No more data: Send the '0' signal to stop the receiver
+                break 
+            chunk_len = len(chunk)# Get the size of this specific chunk
+            header = struct.pack(FORMAT, chunk_len) # 4. Pack the length into 4 bytes
+            client.sendall(header + chunk) # Send [Length Header] + [The Actual Encrypted Bytes]
 
     except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
         pass
@@ -225,6 +212,7 @@ def DeleteFile(file_ids: list[str], ClientHandler)-> dict[str, Any]:
     """    
     try:
         with SessionLocal() as db:
+            print(file_ids)
             # get the total size of all deleted files:
             # generates SELECT SUM(filesize) FROM Files WHERE file_id IN {file_ids}
             total_size: int = db.query(func.sum(File.filesize))\
@@ -235,8 +223,8 @@ def DeleteFile(file_ids: list[str], ClientHandler)-> dict[str, Any]:
             .filter(File.file_id.in_(file_ids))\
             .delete(synchronize_session=False)
             # attach user to the session
-            user_in_session = db.merge(ClientHandler.user)
-            user_in_session.curr_storage -= total_size
+            user_in_session: User = db.merge(ClientHandler.user)
+            user_in_session.curr_storage = user_in_session.curr_storage - total_size
             db.commit()
         for file_id in file_ids:
             rmtree(f"./StorageFiles/{file_id}")
@@ -245,7 +233,6 @@ def DeleteFile(file_ids: list[str], ClientHandler)-> dict[str, Any]:
         print(e)
         return {"status": False, "message": f"The server Couldn't delete this {"files" if len(file_ids) > 1 else "file"}."}
 
-
 def createLink(file_id: str)-> dict[str, Any]:
     try:
         with SessionLocal() as db:
@@ -253,7 +240,6 @@ def createLink(file_id: str)-> dict[str, Any]:
         return {"status": True,"message": "Share link created!", "link": ""}
     except:
         return {"status": False,"message": "Couldn't Create share link."}
-
 
 def get_file_names(directory: str) -> list[str]:
     """Return a list of file names in the given directory (non-recursive)."""

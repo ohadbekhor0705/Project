@@ -1,7 +1,8 @@
-from datetime import datetime
+import itertools
 
 from customtkinter.windows.widgets.ctk_frame import CTkFrame
 try:
+    import tkinter as tk
     import customtkinter as Ctk
     from tkinter import ttk
     from tkinter import filedialog as fd
@@ -46,6 +47,7 @@ class CClientGUI(CClientBL):
         self.SAVE = "SAVE"
         self.GET = "GET"
         self.operation_thread: threading.Thread | None = None
+        self.work_event: threading.Event = threading.Event()
         self.create_ui()
     
     def create_ui(self) -> None:
@@ -63,17 +65,17 @@ class CClientGUI(CClientBL):
         self.response_title.place(relx=0.5, rely=0.04, anchor="center")
 
         # Progress Bar
-        self.progress_bar = Ctk.CTkProgressBar(
-            self.storage_tab,
-            corner_radius=10,
-            border_width=2,
-            orientation="horizontal",
-            mode="determinate",
-            determinate_speed=5,
-            indeterminate_speed=0.5
-        )
-        self.progress_bar.place(relx=0.1, rely=0.15, relheight=0.03, relwidth=0.87)
-        self.progress_bar.set(0)   
+        # self.progress_bar = Ctk.CTkProgressBar(
+        #     self.storage_tab,
+        #     corner_radius=10,
+        #     border_width=2,
+        #     orientation="horizontal",
+        #     mode="determinate",
+        #     determinate_speed=5,
+        #     indeterminate_speed=0.5
+        # )
+        # self.progress_bar.place(relx=0.1, rely=0.15, relheight=0.03, relwidth=0.87)
+        # self.progress_bar.set(0)   
         # Button Frame for better organization
         self.button_frame = Ctk.CTkLabel(self.storage_tab, text="", fg_color=None)
         self.button_frame.place(relx=0.1, rely=0.22, relwidth=0.87)
@@ -261,9 +263,10 @@ class CClientGUI(CClientBL):
             # Create Storage Frame:
             self.storage_tab: CTkFrame   = self.tabview.add("Storage")
             self.create_StorageFrame()
+            self.tabview.set("Storage")
             self.usertab: CTkFrame = self.tabview.add("UserData")
             self.create_UserDataTab()
-            self.tabview.set("Storage")
+            
             self.response_title.configure(text = response["message"])
             for file in response["files"]:
                 datetime_obj: datetime = datetime.datetime.fromtimestamp(file["modified"])
@@ -291,10 +294,12 @@ class CClientGUI(CClientBL):
         )
         if filename:
 
-            self.progress_bar.set(0)
             f = open(filename,"rb")
-            self.operation_thread = threading.Thread(target=self.sendfile, args=(f,"upload",self.progress_bar,self.files_table,self.response_title))
+            tbl = self.files_table
+            res_text = self.response_title
+            self.operation_thread = threading.Thread(target=lambda: self.sendfile(f,"upload" , table = tbl, response_text=res_text))
             self.operation_thread.start()
+            threading.Thread(target=self.animate, args=("Uploading file",)).start()
         else:
             self.response_title.configure(text="File not found! Please select a file again.") 
 
@@ -342,8 +347,9 @@ class CClientGUI(CClientBL):
         values: list[str] = self.files_table.item(selected_row)["values"]
         file_id, filename, file_size, _ = values
 
-        self.operation_thread = threading.Thread(target=self.ReceiveFile, args=(self.progress_bar,file_id,filename,float(file_size.split(" ")[0])*1048576))
+        self.operation_thread = threading.Thread(target=self.ReceiveFile, args=(file_id, filename))
         self.operation_thread.start()
+        threading.Thread(target=self.animate, args=("fetching file",)).start()
 
     def on_click_delete(self) -> None:
         if self.operation_thread and self.operation_thread.is_alive():
@@ -354,11 +360,11 @@ class CClientGUI(CClientBL):
         selected_rows: tuple[str, ...]= self.files_table.selection()
         
         selected_files = [ self.files_table.item(row)["values"][0] for row in selected_rows]
-        self.operation_thread = threading.Thread(target=self.delete_files,args=(selected_files, self.files_table,selected_rows,self.response_title))
+        self.operation_thread = threading.Thread(target=lambda: self.delete_files(selected_files, self.files_table, selected_rows, response_text=self.response_title))
         self.operation_thread.start()
     
     def logout(self) -> None:
-        self.Event.clear() # clearing the event flag
+        self.connection_event.clear() # clearing the event flag
         if self.client:
             self.send_message("!DIS")
             self.client.close()
@@ -375,7 +381,7 @@ class CClientGUI(CClientBL):
         self.current_storage = 0
     
     def check_connection(self) ->None:
-        while self.Event.is_set():
+        while self.connection_event.is_set():
             try:
                 self.client.send(b'')
             except OSError:
@@ -384,6 +390,12 @@ class CClientGUI(CClientBL):
                 break
             sleep(2)
                 
+    def animate(self, name: str):
+        for c in itertools.cycle(['.','..', '...', '....', '.....', ]):
+            if self.operation_thread and self.operation_thread.is_alive():
+                self.response_title.configure(text=f"{name}{c}")
+                sleep(0.5)
+            else: break
 
 if __name__ == "__main__":
     try:

@@ -21,7 +21,7 @@ class CClientBL():
         
         self.client: socket.socket | None = None
         self.user = {}
-        self.Event = threading.Event()
+        self.connection_event = threading.Event()
         self.public_key: bytes
         self.session_key: bytes
         self.fernet: fernet.Fernet
@@ -82,7 +82,7 @@ class CClientBL():
             response_bytes_encrypted: bytes = _client_socket.recv(struct.unpack(FORMAT,response_length)[0])
             response: dict[str, Any] = json.loads(self.fernet.decrypt(response_bytes_encrypted).decode())
             if response["status"] == True:
-                self.Event.set() # setting the flag to True.
+                self.connection_event.set() # setting the flag to True.
                 self.user = response["user"]
                 self.files = response["files"]
                 self.username = auth["username"]
@@ -95,12 +95,14 @@ class CClientBL():
             return {"message": "The server isn't running. Please Try Again Later."},None
     
     
-    def sendfile(self,file: BinaryIO, command: str,progress_bar: CTkProgressBar, files_table: Treeview, title: CTkLabel) -> None:
+    def sendfile(self,file: BinaryIO, command: str,**kwargs) -> None:
         global FORMAT
+        response_text: CTkLabel =  kwargs["response_text"]
+        files_table: Treeview = kwargs["table"]
         file_size: int = os.path.getsize(file.name) # file size in bytes.
         # if user doesn't have storage then display appropriate message
         if file_size/(1024**2) + self.current_storage  > self.max_storage:
-            title.configure(text= "You're out of storage!")
+            response_text.configure(text= "You dont't have enough storage to upload this file")
             return
         payload: dict[str, Any] = {
             "cmd": command,
@@ -118,25 +120,26 @@ class CClientBL():
         response = self.get_message()
         if response["status"]:
             self.files.append({"file_id": response["file_id"] ,"filename": payload["filename"], "filesize": file_size / (1024**2)})
-            self.current_storage += file_size
-            progress_bar.set(0)
+            self.current_storage += file_size / (1024**2)
             dateTime: datetime = datetime.now().strftime("%Y-%m-%d")
             files_table.insert("","end", values= (response["file_id"],file.name.split("/")[-1], str(round(file_size,2))+" bytes",dateTime))
-            title.configure(text=f"{response["message"]}")
+            response_text.configure(text=f"{response["message"]}")
     
-    def delete_files(self,file_ids: list[str], files_table: Treeview, selected_rows: tuple[str,...], title: CTkLabel) -> None:
+    def delete_files(self,file_ids: list[str], files_table: Treeview, selected_rows: tuple[str,...], **kwargs) -> None:
+        response_text = kwargs["response_text"]
+
         payload = {
             "cmd": "delete",
             "ids": file_ids
         }
         self.send_message(payload)
         response = self.get_message()
-        title.configure(text=response["message"])
+        response_text.configure(text=response["message"])
         updated: int = 0
         if response["status"]:
             files_table.delete(*selected_rows)
 
-    def ReceiveFile(self,progress_bar: CTkProgressBar, file_id:str, filename:str, file_size: int):
+    def ReceiveFile(self, file_id:str, filename:str):
 
         
         self.send_message({"cmd": "save","file_id": file_id,"filename":filename})

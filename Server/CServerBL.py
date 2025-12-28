@@ -212,8 +212,6 @@ class CClientHandler(threading.Thread):
         self.write_to_log(f"[CClientBl] {threading.active_count() - 1} Are currently connected!")
         iter = 1
         while True:
-            print(f"{iter=}")
-            iter+=1
             try:
 
                 message: str | None = self.get_message()

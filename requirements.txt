@@ -1,10 +1,7 @@
 customtkinter
-tkfontawesome
-tksvg
 cryptography
 uuid
 bcrypt
 SQLAlchemy
 uuid6
 flask
-pillow
