@@ -141,11 +141,13 @@ def UploadFile(payload: dict[str, Any], ClientHandler) -> dict[str,Any] | None:
             os.mkdir(save_path)
         while True:
             #  Read the length of the ENCRYPTED chunk
-            header_data = client.recv(HEADER_SIZE) or struct.pack(FORMAT,0)
-            chunk_len = struct.unpack(FORMAT, header_data)[0]
-            if chunk_len == 0: #  Check for EOF (The 0 you sent at the end)
+            header_bytes = client.recv(HEADER_SIZE)
+            header = struct.unpack(FORMAT, header_bytes)[0]
+            print(f"header: {header}")
+            if header == 0: #  Check for EOF (The 0 you sent at the end)
                 break 
-            encrypted_chunk =  client.recv(chunk_len)# Read the encrypted block
+            encrypted_chunk =  client.recv(header)# Read the encrypted block
+            #print(f"Writing chunk {chunks}")
             with open(f"{save_path}/{chunks}.bin", "ab") as f: f.write(encrypted_chunk) # Write the encrypted chunk
             chunks += 1
         print(f"file file received from: {ClientHandler}")

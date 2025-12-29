@@ -1,4 +1,5 @@
 import io
+import platform
 import socket
 from typing import Tuple,BinaryIO
 import json
@@ -13,6 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography import fernet
 import base64
 import threading
+import subprocess
 CHUNK_SIZE = 1024 * 256
 FORMAT = "!I"
 class CClientBL():
@@ -30,6 +32,7 @@ class CClientBL():
         self.max_storage: int = 0
         self.files: list[dict[str,Any]] = []
         self.username: str = ""
+        self.work_event: threading.Event = threading.Event()
      
     def connect(self, username: str, password: str, cmd: str) -> Tuple[dict[str,Any], socket.socket | None]:
         """
@@ -96,6 +99,7 @@ class CClientBL():
     
     
     def sendfile(self,file: BinaryIO, command: str,**kwargs) -> None:
+        self.work_event.set()
         global FORMAT
         response_text: CTkLabel =  kwargs["response_text"]
         files_table: Treeview = kwargs["table"]
@@ -118,6 +122,7 @@ class CClientBL():
         self.client.sendall(struct.pack(FORMAT, 0))
 
         response = self.get_message()
+        self.work_event.clear()
         if response["status"]:
             self.files.append({"file_id": response["file_id"] ,"filename": payload["filename"], "filesize": file_size / (1024**2)})
             self.current_storage += file_size / (1024**2)
@@ -126,6 +131,7 @@ class CClientBL():
             response_text.configure(text=f"{response["message"]}")
     
     def delete_files(self,file_ids: list[str], files_table: Treeview, selected_rows: tuple[str,...], **kwargs) -> None:
+        self.work_event.set()
         response_text = kwargs["response_text"]
 
         payload = {
@@ -134,6 +140,7 @@ class CClientBL():
         }
         self.send_message(payload)
         response = self.get_message()
+        self.work_event.clear()
         response_text.configure(text=response["message"])
         updated: int = 0
         if response["status"]:
@@ -141,24 +148,29 @@ class CClientBL():
 
     def ReceiveFile(self, file_id:str, filename:str):
 
-        
+        self.work_event.set()
         self.send_message({"cmd": "save","file_id": file_id,"filename":filename})
         received = 0
         HEADER_SIZE = struct.calcsize(FORMAT)
-        # Get encrypted file size:
-        encrypted_filesize: int = self.get_message()["encrypted_size"]
-        print(f"new size: {encrypted_filesize}")
         if not os.path.exists("./saved_files"):
             os.mkdir("saved_files")
-        with open(f"saved_files/{filename}","wb") as saved_file:
+        file_path = f"saved_files/{filename}"
+        with open(file_path,"wb") as saved_file:
             while True:
                 chunk_len = self.client.recv(HEADER_SIZE)
                 if chunk_len == 0: # if we got EOF then break:
                     break
                 header = struct.unpack(FORMAT, chunk_len)[0] # get header
-
-                encrypted_chunk = self.client.recv(header)
+                encrypted_chunk = self.recvall(header)
                 saved_file.write(self.fernet.decrypt(encrypted_chunk))
+        self.work_event.clear()
+        if os.path.exists(file_path): # opening the file, cross platform support.
+            system_name = platform.system()
+            match system_name:
+                case "Darwin": subprocess.run(["open", file_path]) # macOS
+                case "Windows": os.startfile(file_path) # Windows
+                case "Linux": subprocess.run(["xdg-open", file_path]) # Linux
+
     @overload
     def send_message(self, payload: str): ...
     @overload 
@@ -190,9 +202,14 @@ class CClientBL():
         
         return json.loads(self.fernet.decrypt(encrypted_payload).decode())
     
-
-if __name__ == "__main__":
-    Client = CClientBL()
-    res, Client.client = Client.connect("ohad","ohad","login")
-    if Client.Event.is_set():
-        Client.send_message({ "message": "Hello!!"})
+    def recvall(self, n: int) -> bytes:
+        if n == 0: return b''
+        data = b'' 
+        received = 0
+        while received < n:
+            chunk = self.client.recv(n - received)
+            if not chunk:
+                raise ConnectionError(f"Socket closed. Got {len(data)}/{n} bytes.")
+            received += len(chunk)
+            data += chunk
+        return data
