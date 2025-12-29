@@ -1,23 +1,11 @@
 # SkyVault — Secure Cloud Storage
 
 Lightweight Python client/server for secure file storage with a simple Tkinter GUI.
+Systems planning and programming Major
+5 points bagrut 883589
 
-## Features
-- User auth (register/login)  
-- Upload/download over TCP sockets  
-- Basic transfer encryption  
-- Tkinter GUI
 
-## Structure
-```
-Project/
-├── CClientBL.py
-├── CServerBL.py
-├── StorageGUI.py
-├── requirements.txt
-├── GUIDesign.PNG
-└── README.md
-```
+
 
 ## Install
 ```bash
