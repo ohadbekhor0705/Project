@@ -13,7 +13,7 @@ from models import File, User
 import os
 
 FORMAT = "!I"
-CHUNK_SIZE = 1024 *256 # 256 KB
+CHUNK_SIZE = 1024 *64  # 64 KB
 
 
 
@@ -138,15 +138,11 @@ def UploadFile(payload: dict[str, Any], ClientHandler) -> dict[str,Any] | None:
             os.mkdir(save_path)
         while True:
             #  Read the length of the ENCRYPTED chunk
-            header_bytes = client.recv(HEADER_SIZE)
+            header_bytes = recv_exact(client,HEADER_SIZE)
             header = struct.unpack(FORMAT, header_bytes)[0]
             print(f"header: {header}")
-            if header == 0: #  Check for EOF (The 0 at the end)
-                break 
-            encrypted_chunk =  client.recv(header)# Read the encrypted block
-            #print(f"Writing chunk {chunks}")
-            encrypted_chunk =  client.recv(header)# Read the encrypted block
-            #print(f"Writing chunk {chunks}")
+            if header == 0: break  #  Check for EOF (The 0 at the end)
+            encrypted_chunk =  recv_exact(client, header) # Read the encrypted block
             with open(f"{save_path}/{chunks}.bin", "ab") as f: f.write(encrypted_chunk) # Write the encrypted chunk
             chunks += 1
         print(f"file file received from: {ClientHandler}")
@@ -271,3 +267,12 @@ def handle_client_request(payload: dict[str, Any],ClientHandler) -> dict[str, An
         case _:
             response = {"status": False, "message": "Invalid command"}
     return response
+
+def recv_exact(sock, size):
+    data = b""
+    while len(data) < size:
+        packet = sock.recv(size - len(data))
+        if not packet:
+            raise ConnectionError("Socket closed unexpectedly")
+        data += packet
+    return data

@@ -15,7 +15,7 @@ from cryptography import fernet
 import base64
 import threading
 import subprocess
-CHUNK_SIZE = 1024 * 256
+CHUNK_SIZE = 1024 * 64
 FORMAT = "!I"
 class CClientBL():
     def __init__(self) -> None:
@@ -117,8 +117,9 @@ class CClientBL():
 
         while chunk := file.read(CHUNK_SIZE):
             encrypted_chunk = self.fernet.encrypt(chunk)
-            self.client.send(struct.pack(FORMAT, len(encrypted_chunk)))
-            self.client.sendall(encrypted_chunk)
+            header = struct.pack(FORMAT, len(encrypted_chunk))
+            self.client.sendall(header + encrypted_chunk)
+        print("EOF")
         self.client.sendall(struct.pack(FORMAT, 0))
 
         response = self.get_message()
@@ -157,11 +158,11 @@ class CClientBL():
         file_path = f"saved_files/{filename}"
         with open(file_path,"wb") as saved_file:
             while True:
-                chunk_len = self.client.recv(HEADER_SIZE)
+                chunk_len = self.recv_exact(HEADER_SIZE)
                 if chunk_len == 0: # if we got EOF then break:
                     break
                 header = struct.unpack(FORMAT, chunk_len)[0] # get header
-                encrypted_chunk = self.recvall(header)
+                encrypted_chunk = self.recv_exact(header)
                 saved_file.write(self.fernet.decrypt(encrypted_chunk))
         self.work_event.clear()
         if os.path.exists(file_path): # opening the file, cross platform support.
@@ -202,14 +203,11 @@ class CClientBL():
         
         return json.loads(self.fernet.decrypt(encrypted_payload).decode())
     
-    def recvall(self, n: int) -> bytes:
-        if n == 0: return b''
-        data = b'' 
-        received = 0
-        while received < n:
-            chunk = self.client.recv(n - received)
-            if not chunk:
-                raise ConnectionError(f"Socket closed. Got {len(data)}/{n} bytes.")
-            received += len(chunk)
-            data += chunk
+    def recv_exact(self, size: int) -> bytes:
+        data = b""
+        while len(data) < size:
+            packet = self.client.recv(size - len(data))
+            if not packet:
+                raise ConnectionError("Socket closed unexpectedly")
+            data += packet
         return data
