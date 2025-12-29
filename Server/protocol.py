@@ -145,6 +145,8 @@ def UploadFile(payload: dict[str, Any], ClientHandler) -> dict[str,Any] | None:
                 break 
             encrypted_chunk =  client.recv(header)# Read the encrypted block
             #print(f"Writing chunk {chunks}")
+            encrypted_chunk =  client.recv(header)# Read the encrypted block
+            #print(f"Writing chunk {chunks}")
             with open(f"{save_path}/{chunks}.bin", "ab") as f: f.write(encrypted_chunk) # Write the encrypted chunk
             chunks += 1
         print(f"file file received from: {ClientHandler}")
