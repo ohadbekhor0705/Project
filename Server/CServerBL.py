@@ -1,31 +1,25 @@
 from typing import Any
-
-
-try:
-    from typing import Any, Dict
-    import socket  # Import socket for networking
-    import threading  # Import threading for concurrent connections
-    import json  # Import json for message serialization
-    import os  # Import os for file system operations
-    from tkinter.ttk import Treeview  # Import Treeview for GUI client table
-    from typing import Callable, List, Tuple, Dict  # Type hints
-    from protocol import *  # Import protocol definitions
-    import bcrypt  # Import bcrypt for password hashing
-    from models import User,File,SessionLocal # Import db for Database operations
-    import struct
-    from customtkinter import CTkTextbox
-    from run import run
-    import multiprocessing
-    import hashlib
-    from cryptography.hazmat.primitives.asymmetric import rsa, padding
-    from cryptography.hazmat.primitives import serialization
-    from cryptography import fernet
-    from cryptography.hazmat.primitives.asymmetric import padding
-    from cryptography.hazmat.primitives import hashes
+import socket  # Import socket for networking
+import threading  # Import threading for concurrent connections
+import json  # Import json for message serialization
+import os  # Import os for file system operations
+from tkinter.ttk import Treeview  # Import Treeview for GUI client table
+from typing import Callable, List, Tuple, Dict  # Type hints
+from protocol import *  # Import protocol definitions
+import bcrypt  # Import bcrypt for password hashing
+from models import User,File,SessionLocal # Import db for Database operations
+import struct
+from customtkinter import CTkTextbox
+from run import run
+import multiprocessing
+import hashlib
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization
+from cryptography import fernet
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
     
 
-except ModuleNotFoundError:
-    raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
 
 
 class CServerBL():
@@ -59,8 +53,8 @@ class CServerBL():
         Initializes and binds a TCP socket to self._ip and self._port, sets self.event,
         and begins listening for incoming client connections.
         """
-        self.web_server = multiprocessing.Process(target=run)
-        #self.write_to_log(self)  # Log server start
+        #self.web_server = multiprocessing.Process(target=run)
+        self.write_to_log(self)  # Log server start
         #self.web_server.start()
         try:
             self.event.set()  # Set event flag
@@ -132,7 +126,7 @@ class CServerBL():
         self.write_to_log(f"[ServerBL] stop_server() called")  # Log stop
         try:
             #self.web_server.kill()
-            self.web_server = None
+            #self.web_server = None
             self.event.clear()  # Clear event flag
             self.write_to_log(f"[ServerBL] cleared flag!")
             for clientHandler in self.clientHandlers:
@@ -213,26 +207,19 @@ class CClientHandler(threading.Thread):
         iter = 1
         while True:
             try:
-
                 message: str | None = self.get_message()
-                
                 if message:
-                    if message == "!DIS":
-                        break
+                    if message == "!DIS": break
                     payload: dict[str, Any] = json.loads(message)
                     response: dict[str, Any] | None = handle_client_request(payload,self)
-                    if response:
-                        self.send_message(response)
-                else:
-                    break
+                    if response: self.send_message(response)
+                else:  break
             except ConnectionResetError:
                 self.write_to_log("[ClientHandler -> run()] client was forced closed!")
                 break
             except ConnectionAbortedError:
                 self.write_to_log("ClientHandler -> run()] client connection Aborted!")
                 break
-           
-            
         self.disconnect()
 
     def get_message(self) -> str | None:
@@ -243,7 +230,8 @@ class CClientHandler(threading.Thread):
     
     def send_message(self, data: dict[str,Any]):
         encrypted_data = self.f.encrypt(json.dumps(data).encode())
-        self.client.send(struct.pack("!I",len(encrypted_data)) + encrypted_data)
+        header = struct.pack(FORMAT,len(encrypted_data)) # calculating header
+        self.client.send(header + encrypted_data) # sending header with encrypted data
     
     def disconnect(self) -> None:
         self.write_to_log(f"[SERVER-BL] {self} disconnected")

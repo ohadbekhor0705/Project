@@ -1,30 +1,18 @@
-
-
-
-
-try:
-    from typing import Any
-    from sqlalchemy.sql.schema import Column
-    from typing import Dict, Tuple, Any, overload
-    from sqlalchemy import (
-    create_engine, Column, Integer, String, Boolean, ForeignKey, Text, BigInteger )
-    from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session
-    from flask_login import UserMixin
-except ModuleNotFoundError:
-    raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
-
-
-
+from typing import Any
+from sqlalchemy.sql.schema import Column
+from typing import Dict, Tuple, Any, overload
+from sqlalchemy import (
+create_engine, Column, Integer, String, Boolean, ForeignKey, Text, BigInteger )
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, scoped_session
 
 # -------------------------
 # Database setup
 # -------------------------
 Base = declarative_base()
 
-class User(Base, UserMixin):
+class User(Base):
     """
     ORM model for a user in the system.
-
     Attributes:
         user_id (int): Primary key, auto-incremented.
         username (str): Username of the user.
@@ -80,9 +68,6 @@ class File(Base):
     user_id: Column[int] = Column(Integer, ForeignKey("users.user_id"))
 
     user = relationship("User", back_populates="files")
-
-
-
 
 # SQLite engine (thread-safe)
 engine = create_engine(

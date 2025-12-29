@@ -1,20 +1,15 @@
 import itertools
-
 from customtkinter.windows.widgets.ctk_frame import CTkFrame
-try:
-    import tkinter as tk
-    import customtkinter as Ctk
-    from tkinter import ttk
-    from tkinter import filedialog as fd
-    from CClientBL import CClientBL
-    import threading
-    import json
-    import os
-    import datetime
-    from time import sleep
-except ModuleNotFoundError:
-    print("please run command on the terminal: pip install -r requirements.txt")
-    quit()
+import tkinter as tk
+import customtkinter as Ctk
+from tkinter import ttk
+from tkinter import filedialog as fd
+from CClientBL import CClientBL
+import threading
+import json
+import os
+import datetime
+from time import sleep
 class CClientGUI(CClientBL):
     
     def __init__(self) -> None: 
@@ -25,6 +20,7 @@ class CClientGUI(CClientBL):
         Ctk.set_appearance_mode("Dark")
         self.master = Ctk.CTk()
         self.FONT: tuple[str, int] = ("Roboto",17.8)
+        self.BOLD: tuple[str, int] = ("Aria;",19, "bold")
         # Login Frame widgets
         self._usernameLabel: Ctk.CTkLabel | None = None
         self._usernameEntry: Ctk.CTkEntry| None= None
@@ -83,7 +79,6 @@ class CClientGUI(CClientBL):
         self._uploadfile_button = Ctk.CTkButton(self.button_frame, text="Upload 📤", font=self.FONT, anchor="center", command=self.on_click_Upload)
         self._savefile_button = Ctk.CTkButton(self.button_frame, text="Save 💾", font=self.FONT, anchor="center", command=self.save_file)
         self._deletefile_button = Ctk.CTkButton(self.button_frame, text="Delete 🗑️", font=self.FONT, anchor="center", command=self.on_click_delete)  
-       
         self._create_link_button = Ctk.CTkButton(
             self.button_frame,
             text="Create Link 🔗",
@@ -91,7 +86,6 @@ class CClientGUI(CClientBL):
             anchor="center",
             compound="left"
         )
-
         # Pack buttons with spacing
         buttons = [self._uploadfile_button, self._savefile_button, self._deletefile_button, self._create_link_button]
         for i, btn in enumerate(buttons):
@@ -243,7 +237,6 @@ class CClientGUI(CClientBL):
         )
         logout_button.pack(pady=(10, 25))
 
-
     def run(self) -> None: self.master.mainloop()
     
     def on_click_button_connect(self, cmd: str) -> None:
@@ -304,9 +297,7 @@ class CClientGUI(CClientBL):
             self.response_title.configure(text="File not found! Please select a file again.") 
 
     def remember_action(self, action: str, **user_data)  -> None:
-       
         try: 
-            
             if action == self.SAVE:
                 remember: bool = self._checkBox.get() == "True"
                 if remember:
@@ -391,12 +382,12 @@ class CClientGUI(CClientBL):
             sleep(2)
                 
     def animate(self, name: str):
+        self.response_title.configure(font=self.BOLD)
         for c in itertools.cycle(['.','..', '...', '....', '.....', ]):
-            if self.operation_thread and self.operation_thread.is_alive():
-                self.response_title.configure(text=f"{name}{c}")
+            if self.work_event.is_set():
+                self.response_title.configure(text=c)
                 sleep(0.5)
             else: break
-
 if __name__ == "__main__":
     try:
         print("Press Ctrl + C to exit.")

@@ -1,19 +1,16 @@
 import socket
 import struct
 from shutil import rmtree
-try:
-    from typing import Any
-    from sqlalchemy.orm.session import Session
-    from sqlalchemy import and_, func, select
-    from typing import Dict, Any, overload
-    import bcrypt
-    from models import User, File, SessionLocal
-    from datetime import datetime
-    from uuid6 import uuid7
-    from models import File, User
-    import os
-except ModuleNotFoundError:
-    raise ModuleNotFoundError("please run command on the terminal: pip install -r requirements.txt")
+from typing import Any
+from sqlalchemy.orm.session import Session
+from sqlalchemy import and_, func, select
+from typing import Dict, Any, overload
+import bcrypt
+from models import User, File, SessionLocal
+from datetime import datetime
+from uuid6 import uuid7
+from models import File, User
+import os
 
 FORMAT = "!I"
 CHUNK_SIZE = 1024 *256 # 256 KB
@@ -141,11 +138,13 @@ def UploadFile(payload: dict[str, Any], ClientHandler) -> dict[str,Any] | None:
             os.mkdir(save_path)
         while True:
             #  Read the length of the ENCRYPTED chunk
-            header_data = client.recv(HEADER_SIZE) or struct.pack(FORMAT,0)
-            chunk_len = struct.unpack(FORMAT, header_data)[0]
-            if chunk_len == 0: #  Check for EOF (The 0 you sent at the end)
+            header_bytes = client.recv(HEADER_SIZE)
+            header = struct.unpack(FORMAT, header_bytes)[0]
+            print(f"header: {header}")
+            if header == 0: #  Check for EOF (The 0 at the end)
                 break 
-            encrypted_chunk =  client.recv(chunk_len)# Read the encrypted block
+            encrypted_chunk =  client.recv(header)# Read the encrypted block
+            #print(f"Writing chunk {chunks}")
             with open(f"{save_path}/{chunks}.bin", "ab") as f: f.write(encrypted_chunk) # Write the encrypted chunk
             chunks += 1
         print(f"file file received from: {ClientHandler}")
@@ -228,10 +227,10 @@ def DeleteFile(file_ids: list[str], ClientHandler)-> dict[str, Any]:
             db.commit()
         for file_id in file_ids:
             rmtree(f"./StorageFiles/{file_id}")
-        return {"status": True, "message": f"{"Files" if len(file_ids) > 1 else "File"} deleted successfully"}
+        return {"status": True, "message": "File(s) deleted successfully"}
     except Exception as e:
         print(e)
-        return {"status": False, "message": f"The server Couldn't delete this {"files" if len(file_ids) > 1 else "file"}."}
+        return {"status": False, "message": "The server Couldn't delete this file(s)."}
 
 def createLink(file_id: str)-> dict[str, Any]:
     try:
