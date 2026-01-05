@@ -68,14 +68,7 @@ class CServerBL():
 
                 encrypted_session_key_len_bytes = client.recv(4)
                 encrypted_session_key = client.recv(struct.unpack(FORMAT,encrypted_session_key_len_bytes)[0])
-                session_key = self.private_key.decrypt(
-                    encrypted_session_key,
-                    padding.OAEP(
-                        mgf=padding.MGF1(algorithm=hashes.SHA256()),  # mask generation function
-                        algorithm=hashes.SHA256(),                     # hash algorithm for OAEP itself
-                        label=None
-                    )
-                )
+                session_key = self.private_key.decrypt(encrypted_session_key,padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
 
                 f = fernet.Fernet(session_key)
                 self.write_to_log(client)
@@ -202,7 +195,6 @@ class CClientHandler(threading.Thread):
     def run(self) -> None:
         # Server functionality here
         self.write_to_log(f"[CClientBl] {threading.active_count() - 1} Are currently connected!")
-        iter = 1
         while True:
             try:
                 message: str | None = self.get_message()
@@ -245,3 +237,9 @@ if __name__ == "__main__":
         print("Press Ctrl + C to exit.")
         server = CServerBL()
         server.start_server()
+        try:
+            from time import sleep
+            while True:
+                sleep(1)
+        except KeyboardInterrupt:
+            server.stop_server()
